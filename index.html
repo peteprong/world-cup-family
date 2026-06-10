@@ -68,9 +68,10 @@
                 }
             };
 
-            const localDate = match.date ? new Date(match.date).toLocaleString('en-US', { 
-                timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
-            }) : 'TBD';
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+            });
+            const localDate = match.date ? formatter.format(new Date(match.date)) : 'TBD';
 
             let pointsEarned = null;
             if (actualResult && prediction != null) {
@@ -137,7 +138,6 @@
                         </div>
                     )}
 
-                    {/* Reveal everyone's picks once the match starts */}
                     {isStarted && compMembers && compMembers.length > 0 && (
                         <div className="mt-4 pt-3 border-t border-gray-100">
                             <h4 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Competition Picks</h4>
@@ -532,11 +532,17 @@
             const [isSyncing, setIsSyncing] = React.useState(false);
             const [dataLoaded, setDataLoaded] = React.useState(false);
 
-            const refreshData = React.useCallback(async () => {
-                if (username) {
+            React.useEffect(() => {
+                const syncData = async () => {
+                    if (!username) return;
                     setIsSyncing(true);
                     try {
-                        const res = await fetch(SCRIPT_URL, { method: 'GET', redirect: 'follow' });
+                        const res = await fetch(SCRIPT_URL, {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' },
+                            mode: 'cors'
+                        });
+                        
                         if (!res.ok) throw new Error("Network response was not ok");
                         const data = await res.json();
                         
@@ -573,9 +579,14 @@
                         if (data.comps) {
                             const userComps = data.comps.filter(c => c.members.includes(username));
                             setMyComps(userComps);
+                            
+                            // Check if activeComp still exists and update its data
                             if (activeComp) {
-                                const updatedActive = data.comps.find(c => c.code === activeComp.code);
-                                if (updatedActive) setActiveComp(updatedActive);
+                                const updatedComp = data.comps.find(c => c.code === activeComp.code);
+                                // Ensure activeComp isn't null if it wasn't found in this specific refresh cycle.
+                                if(updatedComp) {
+                                    setActiveComp(updatedComp);
+                                }
                             }
                         }
                         setDataLoaded(true);
@@ -585,14 +596,12 @@
                     } finally {
                         setIsSyncing(false);
                     }
-                }
-            }, [username, activeComp]);
+                };
 
-            React.useEffect(() => {
-                refreshData();
-                const timer = setInterval(refreshData, 15000);
+                syncData();
+                const timer = setInterval(syncData, 15000);
                 return () => clearInterval(timer);
-            }, [refreshData]);
+            }, [username, activeComp]); // Depend on activeComp to use its latest value
 
             const handleLogin = (e) => {
                 e.preventDefault();
@@ -615,10 +624,8 @@
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'savePick', user: username, match: matchId, s1: parseInt(s1), s2: parseInt(s2) })
                     });
-                    await refreshData();
                 } catch (err) { console.error("Failed to save pick:", err); } finally { setIsSyncing(false); }
             };
 
@@ -627,10 +634,8 @@
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'adminUpdate', match: matchId, s1: s1 === '' ? '' : parseInt(s1), s2: s2 === '' ? '' : parseInt(s2) })
                     });
-                    await refreshData();
                 } catch (err) { console.error("Failed to save match:", err); } finally { setIsSyncing(false); }
             };
 
@@ -639,10 +644,8 @@
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'adminUpdate', match: matchId, t1: t1, t2: t2 })
                     });
-                    await refreshData();
                 } catch (err) { console.error("Failed to save teams:", err); } finally { setIsSyncing(false); }
             };
 
@@ -653,15 +656,12 @@
                 try {
                     await fetch(SCRIPT_URL, { 
                         method: 'POST', 
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'createComp', code, name, user: username }) 
                     });
                     await fetch(SCRIPT_URL, { 
                         method: 'POST', 
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'joinComp', code, user: username }) 
                     });
-                    await refreshData();
                 } catch(e) { console.error(e); } finally { setIsSyncing(false); }
             };
 
@@ -671,10 +671,8 @@
                 try {
                     await fetch(SCRIPT_URL, { 
                         method: 'POST', 
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'joinComp', code, user: username }) 
                     });
-                    await refreshData();
                 } catch(e) { console.error(e); } finally { setIsSyncing(false); }
             };
 
