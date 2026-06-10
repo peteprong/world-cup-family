@@ -24,7 +24,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // YOUR SPECIFIC GOOGLE SHEETS CLOUD DATABASE URL
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz8_lhKZy4AjFZ5ZGvaq_3rI_vWYKjBZkJhmvC7XXIcLRYrbZdZCRO2mJn7DZ-lLrTx/exec';
         
         const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
@@ -53,100 +52,218 @@
             return <span className={`text-xs font-bold ${timeLeft === 'Started' ? 'text-red-500' : 'text-blue-500'}`}>{timeLeft}</span>;
         };
 
+        // Utility to convert numeric score picks into reader-friendly labels
+        const getPredictionLabel = (score1, score2, team1, flag1, team2, flag2) => {
+            if (score1 === undefined || score2 === undefined || score1 === null || score2 === null || score1 === '' || score2 === '') return 'None';
+            const s1 = parseInt(score1);
+            const s2 = parseInt(score2);
+            if (s1 > s2) return `${flag1} ${team1}`;
+            if (s2 > s1) return `${flag2} ${team2}`;
+            return `🤝 Draw`;
+        };
+
         const MatchCard = ({ match, prediction, onSave, isStarted, actualResult, timezone, allPicks, compMembers }) => {
-            const [s1, setS1] = React.useState(prediction?.score1 ?? '');
-            const [s2, setS2] = React.useState(prediction?.score2 ?? '');
+            // Local prediction states mapped to selections (null, 'team1', 'draw', 'team2')
+            const [selection, setSelection] = React.useState(() => {
+                if (!prediction) return null;
+                const s1 = parseInt(prediction.score1);
+                const s2 = parseInt(prediction.score2);
+                if (isNaN(s1) || isNaN(s2)) return null;
+                if (s1 > s2) return 'team1';
+                if (s2 > s1) return 'team2';
+                return 'draw';
+            });
             const [saved, setSaved] = React.useState(false);
 
-            const handleSave = () => {
-                if (s1 !== '' && s2 !== '') {
-                    onSave(match.id, parseInt(s1), parseInt(s2));
-                    setSaved(true);
-                    setTimeout(() => setSaved(false), 2000);
+            // Sync with parent props update
+            React.useEffect(() => {
+                if (prediction) {
+                    const s1 = parseInt(prediction.score1);
+                    const s2 = parseInt(prediction.score2);
+                    if (!isNaN(s1) && !isNaN(s2)) {
+                        if (s1 > s2) setSelection('team1');
+                        else if (s2 > s1) setSelection('team2');
+                        else setSelection('draw');
+                    }
+                } else {
+                    setSelection(null);
                 }
+            }, [prediction]);
+
+            const handleSelect = (choice) => {
+                if (isStarted) return;
+                setSelection(choice);
+            };
+
+            const handleSave = () => {
+                if (!selection) return;
+                let s1 = 0, s2 = 0;
+                if (selection === 'team1') { s1 = 1; s2 = 0; }
+                else if (selection === 'team2') { s1 = 0; s2 = 1; }
+                else if (selection === 'draw') { s1 = 1; s2 = 1; }
+
+                onSave(match.id, s1, s2);
+                setSaved(true);
+                setTimeout(() => setSaved(false), 2000);
             };
 
             const formatter = new Intl.DateTimeFormat('en-US', {
                 timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
             });
-            const localDate = match.date ? formatter.format(new Date(match.date)) : 'TBD';
+            
+            let localDate = 'TBD';
+            if (match.date) {
+                try {
+                    localDate = formatter.format(new Date(match.date));
+                } catch (e) {
+                    localDate = 'Time TBD';
+                }
+            }
 
+            // Points calculation based on 3 for Win, 1 for Draw, 0 for loss
             let pointsEarned = null;
-            if (actualResult && prediction != null) {
+            if (actualResult && prediction != null && actualResult.score1 !== '' && actualResult.score2 !== '') {
                 const actS1 = parseInt(actualResult.score1);
                 const actS2 = parseInt(actualResult.score2);
                 const preS1 = parseInt(prediction.score1);
                 const preS2 = parseInt(prediction.score2);
                 
-                if (preS1 === actS1 && preS2 === actS2) pointsEarned = 3;
-                else if (Math.sign(preS1 - preS2) === Math.sign(actS1 - actS2)) pointsEarned = 1;
-                else pointsEarned = 0;
+                const actSign = Math.sign(actS1 - actS2);
+                const preSign = Math.sign(preS1 - preS2);
+
+                if (actSign === preSign) {
+                    pointsEarned = actSign === 0 ? 1 : 3;
+                } else {
+                    pointsEarned = 0;
+                }
             }
 
             return (
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 relative overflow-hidden">
                     {pointsEarned !== null && (
-                        <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-lg text-xs font-bold text-white ${pointsEarned === 3 ? 'bg-green-500' : pointsEarned === 1 ? 'bg-yellow-500' : 'bg-red-400'}`}>
+                        <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-lg text-xs font-bold text-white ${pointsEarned === 3 ? 'bg-green-500 animate-pulse' : pointsEarned === 1 ? 'bg-yellow-500' : 'bg-red-400'}`}>
                             {pointsEarned} Pts
                         </div>
                     )}
-                    <div className="flex justify-between items-center mb-3">
-                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">{match.id.toUpperCase()} | {match.group}</span>
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold text-gray-400 bg-gray-50 px-2.5 py-1 rounded-md">{match.id.toUpperCase()} | {match.group}</span>
                         {!isStarted && <Countdown targetDate={match.date} onComplete={() => {}} />}
                     </div>
-                    <div className="text-center text-xs text-gray-400 mb-4">{localDate}</div>
+                    <div className="text-center text-[11px] font-medium text-gray-400 mb-3">{localDate}</div>
                     
-                    <div className="flex justify-between items-center mb-4">
-                        <div className="flex flex-col items-center w-1/3">
-                            <span className="text-2xl mb-1">{match.flag1}</span>
-                            <span className="font-semibold text-sm text-center line-clamp-1">{match.team1}</span>
-                        </div>
-                        <div className="flex items-center space-x-2 w-1/3 justify-center">
+                    {}
+                    <div className="flex justify-between items-stretch gap-2 mb-4">
+                        {/* Team 1 Selector */}
+                        <button 
+                            disabled={isStarted}
+                            onClick={() => handleSelect('team1')}
+                            className={`flex flex-col items-center justify-center w-5/12 p-3 rounded-xl border-2 transition-all ${
+                                isStarted ? 'border-gray-100 cursor-not-allowed bg-gray-50' :
+                                selection === 'team1' 
+                                    ? 'border-blue-500 bg-blue-50/50 shadow-md scale-[1.02]' 
+                                    : 'border-gray-100 hover:border-gray-200 active:scale-95 bg-white'
+                            }`}
+                        >
+                            <span className="text-3xl mb-2">{match.flag1}</span>
+                            <span className="font-bold text-xs text-center text-gray-800 line-clamp-2 leading-tight">{match.team1}</span>
+                            {selection === 'team1' && (
+                                <span className="mt-2 text-[10px] font-bold text-blue-600 flex items-center bg-blue-100/50 px-2 py-0.5 rounded-full">
+                                    ✓ Winner
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Middle VS or Draw Button */}
+                        <button 
+                            disabled={isStarted}
+                            onClick={() => handleSelect('draw')}
+                            className={`flex flex-col items-center justify-center w-2/12 py-3 rounded-xl border-2 transition-all ${
+                                isStarted 
+                                    ? 'border-gray-100 cursor-not-allowed bg-gray-50' 
+                                    : selection === 'draw'
+                                        ? 'border-yellow-500 bg-yellow-50/50 shadow-md scale-[1.02]'
+                                        : 'border-gray-100 hover:border-gray-200 active:scale-95 bg-white'
+                            }`}
+                        >
                             {isStarted ? (
                                 <div className="text-center">
-                                    <div className="text-xs text-red-500 font-bold mb-1">FINAL</div>
-                                    <div className="flex items-center space-x-2">
-                                        <div className="w-10 p-2 bg-gray-100 rounded text-center font-bold">{actualResult?.score1 ?? '-'}</div>
-                                        <span className="text-gray-400">-</span>
-                                        <div className="w-10 p-2 bg-gray-100 rounded text-center font-bold">{actualResult?.score2 ?? '-'}</div>
+                                    <div className="text-[9px] font-black text-red-500 mb-1">FINAL</div>
+                                    <div className="flex flex-col items-center">
+                                        <span className="text-sm font-black text-gray-800 leading-none">{actualResult?.score1 ?? '-'}</span>
+                                        <span className="text-[10px] text-gray-300 my-0.5">—</span>
+                                        <span className="text-sm font-black text-gray-800 leading-none">{actualResult?.score2 ?? '-'}</span>
                                     </div>
                                 </div>
                             ) : (
-                                <>
-                                    <input type="number" min="0" className="w-12 p-2 border rounded-lg text-center text-lg focus:ring-2 focus:ring-blue-500 outline-none" value={s1} onChange={e => setS1(e.target.value)} />
-                                    <span className="text-gray-400">-</span>
-                                    <input type="number" min="0" className="w-12 p-2 border rounded-lg text-center text-lg focus:ring-2 focus:ring-blue-500 outline-none" value={s2} onChange={e => setS2(e.target.value)} />
-                                </>
+                                <div className="text-center flex flex-col items-center justify-center h-full">
+                                    <span className="text-xs font-black text-gray-400">VS</span>
+                                    <span className={`text-[10px] font-bold mt-2 px-1.5 py-0.5 rounded transition-all ${selection === 'draw' ? 'bg-yellow-500 text-white' : 'text-gray-400 bg-gray-50'}`}>DRAW</span>
+                                </div>
                             )}
-                        </div>
-                        <div className="flex flex-col items-center w-1/3">
-                            <span className="text-2xl mb-1">{match.flag2}</span>
-                            <span className="font-semibold text-sm text-center line-clamp-1">{match.team2}</span>
-                        </div>
+                        </button>
+
+                        {/* Team 2 Selector */}
+                        <button 
+                            disabled={isStarted}
+                            onClick={() => handleSelect('team2')}
+                            className={`flex flex-col items-center justify-center w-5/12 p-3 rounded-xl border-2 transition-all ${
+                                isStarted ? 'border-gray-100 cursor-not-allowed bg-gray-50' :
+                                selection === 'team2' 
+                                    ? 'border-blue-500 bg-blue-50/50 shadow-md scale-[1.02]' 
+                                    : 'border-gray-100 hover:border-gray-200 active:scale-95 bg-white'
+                            }`}
+                        >
+                            <span className="text-3xl mb-2">{match.flag2}</span>
+                            <span className="font-bold text-xs text-center text-gray-800 line-clamp-2 leading-tight">{match.team2}</span>
+                            {selection === 'team2' && (
+                                <span className="mt-2 text-[10px] font-bold text-blue-600 flex items-center bg-blue-100/50 px-2 py-0.5 rounded-full">
+                                    ✓ Winner
+                                </span>
+                            )}
+                        </button>
                     </div>
 
                     {!isStarted && (
-                        <button onClick={handleSave} className={`w-full py-2 rounded-lg font-bold transition-colors ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-                            {saved ? 'Saved!' : 'Save Pick'}
+                        <button 
+                            disabled={!selection}
+                            onClick={handleSave} 
+                            className={`w-full py-2.5 rounded-xl font-bold transition-all text-sm ${
+                                !selection 
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    : saved 
+                                        ? 'bg-green-500 text-white shadow-md' 
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95'
+                            }`}
+                        >
+                            {saved ? 'Saved Successfully! ✓' : selection ? 'Save My Choice' : 'Select a Winner or Draw'}
                         </button>
                     )}
+                    
                     {isStarted && prediction != null && (
-                        <div className="text-center text-sm text-gray-500 bg-gray-50 p-2 rounded-lg mt-2">
-                            Your Pick: <span className="font-bold">{prediction.score1} - {prediction.score2}</span>
+                        <div className="text-center text-xs font-semibold text-gray-500 bg-gray-50 py-2.5 rounded-xl border border-gray-100 mt-2">
+                            Your Pick: <span className="text-blue-600 font-bold">{getPredictionLabel(prediction.score1, prediction.score2, match.team1, match.flag1, match.team2, match.flag2)}</span>
                         </div>
                     )}
 
+                    {}
                     {isStarted && compMembers && compMembers.length > 0 && (
                         <div className="mt-4 pt-3 border-t border-gray-100">
                             <h4 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Competition Picks</h4>
                             <div className="grid grid-cols-2 gap-2">
                                 {compMembers.map(member => {
                                     const memberPick = allPicks?.[member]?.[match.id];
+                                    const label = memberPick ? getPredictionLabel(memberPick.score1, memberPick.score2, match.team1, match.flag1, match.team2, match.flag2) : 'None';
                                     return (
-                                        <div key={member} className="flex justify-between items-center bg-gray-50 p-1.5 rounded text-xs">
-                                            <span className="font-semibold truncate pr-2 text-gray-700">{member}</span>
-                                            <span className={`font-mono px-1.5 py-0.5 rounded border ${memberPick ? 'bg-white border-gray-200 text-gray-800 font-bold' : 'bg-transparent border-transparent text-gray-400'}`}>
-                                                {memberPick ? `${memberPick.score1}-${memberPick.score2}` : 'None'}
+                                        <div key={member} className="flex justify-between items-center bg-gray-50 p-2 rounded-lg text-xs border border-gray-100/50">
+                                            <span className="font-semibold truncate pr-2 text-gray-600">{member}</span>
+                                            <span className={`font-semibold text-[10px] px-2 py-0.5 rounded border leading-none shrink-0 ${
+                                                memberPick 
+                                                    ? label === '🤝 Draw' 
+                                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
+                                                        : 'bg-blue-50 text-blue-700 border-blue-100'
+                                                    : 'bg-transparent border-transparent text-gray-400'
+                                            }`}>
+                                                {label}
                                             </span>
                                         </div>
                                     );
@@ -250,11 +367,16 @@
                     Object.keys(results).forEach(matchId => {
                         const act = results[matchId];
                         const pre = memberPicks[matchId];
-                        if (act && pre && act.score1 !== '' && act.score2 !== '') {
+                        if (act && pre && act.score1 !== '' && act.score2 !== '' && pre.score1 !== '' && pre.score2 !== '') {
                             const a1 = parseInt(act.score1); const a2 = parseInt(act.score2);
                             const p1 = parseInt(pre.score1); const p2 = parseInt(pre.score2);
-                            if (a1 === p1 && a2 === p2) pts += 3;
-                            else if (Math.sign(a1 - a2) === Math.sign(p1 - p2)) pts += 1;
+                            
+                            const actSign = Math.sign(a1 - a2);
+                            const preSign = Math.sign(p1 - p2);
+
+                            if (actSign === preSign) {
+                                pts += actSign === 0 ? 1 : 3;
+                            }
                         }
                     });
                     return { name: member, points: pts };
@@ -551,7 +673,7 @@
 
                         const adminObj = {};
                         if (data.admin) {
-                            data.admin.forEach(a => { adminObj[a.match] = { s1: a.s1, s2: a.s2, t1: a.t1, t2: a.t2 }; });
+                            data.admin.forEach(a => { adminObj[a.match] = { score1: a.s1, score2: a.s2, t1: a.t1, t2: a.t2 }; });
                         }
                         
                         setMatches(currentMatches.map(m => {
@@ -578,10 +700,9 @@
                             const userComps = data.comps.filter(c => c.members.includes(username));
                             setMyComps(userComps);
                             
-                            // The ultimate navigation bug fix! 
-                            // Only update activeComp if we were ALREADY looking at one.
+                            // Safe functional update protecting navigation state jumping
                             setActiveComp(prevComp => {
-                                if (!prevComp) return null; // We are in the lobby! Do not jump back!
+                                if (!prevComp) return null; // Keep users strictly on lobby if they clicked back
                                 const updatedComp = data.comps.find(c => c.code === prevComp.code);
                                 return updatedComp || prevComp;
                             });
@@ -598,7 +719,7 @@
                 syncData();
                 const timer = setInterval(syncData, 15000);
                 return () => clearInterval(timer);
-            }, [username]); // Removed activeComp from dependency so it doesn't trigger endless loops
+            }, [username]);
 
             const handleLogin = (e) => {
                 e.preventDefault();
@@ -618,6 +739,12 @@
 
             const handleSavePick = async (matchId, s1, s2) => {
                 setIsSyncing(true);
+                // Optimistic instant local state updates
+                setPicks(prev => ({ ...prev, [matchId]: { score1: s1, score2: s2 } }));
+                setAllPicks(prev => {
+                    const updatedUserPicks = { ...(prev[username] || {}), [matchId]: { score1: s1, score2: s2 } };
+                    return { ...prev, [username]: updatedUserPicks };
+                });
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
@@ -628,6 +755,7 @@
 
             const handleAdminMatch = async (matchId, s1, s2) => {
                 setIsSyncing(true);
+                setResults(prev => ({ ...prev, [matchId]: { ...prev[matchId], score1: s1, score2: s2 } }));
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
@@ -718,7 +846,7 @@
                     <div className="bg-white px-4 py-3 shadow-sm border-b sticky top-0 z-10 flex flex-col space-y-2">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center space-x-2">
-                                <button onClick={() => setActiveComp(null)} className="text-gray-400 hover:text-gray-800 p-1 bg-gray-50 rounded-full">
+                                <button onClick={() => setActiveComp(null)} className="text-gray-400 hover:text-gray-800 p-1.5 bg-gray-50 rounded-full transition-transform active:scale-95">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
                                 </button>
                                 <div>
