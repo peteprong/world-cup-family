@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>World Cup 2026 Predictor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for in-browser JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; }
+        .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+        .tab-inactive { color: #6b7280; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        
+        // YOUR SPECIFIC GOOGLE SHEETS CLOUD DATABASE URL
+        // *** IMPORTANT: Double check this is your exact Web App URL! ***
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz8_lhKZy4AjFZ5ZGvaq_3rI_vWYKjBZkJhmvC7XXIcLRYrbZdZCRO2mJn7DZ-lLrTx/exec';
+        
+        const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+
+        const Countdown = ({ targetDate, onComplete }) => {
+            const [timeLeft, setTimeLeft] = React.useState('');
+
+            React.useEffect(() => {
+                if (!targetDate) return;
+                const calculateTime = () => {
+                    const diff = new Date(targetDate) - new Date();
+                    if (diff <= 0) {
+                        onComplete();
+                        return 'Started';
+                    }
+                    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                    const m = Math.floor((diff / 1000 / 60) % 60);
+                    return d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`;
+                };
+                setTimeLeft(calculateTime());
+                const timer = setInterval(() => setTimeLeft(calculateTime()), 60000);
+                return () => clearInterval(timer);
+            }, [targetDate, onComplete]);
+
+            return <span className={`text-xs font-bold ${timeLeft === 'Started' ? 'text-red-500' : 'text-blue-500'}`}>{timeLeft}</span>;
+        };
+
+        const MatchCard = ({ match, prediction, onSave, isStarted, actualResult, timezone, allPicks, compMembers }) => {
+            const [s1, setS1] = React.useState(prediction?.score1 ?? '');
+            const [s2, setS2] = React.useState(prediction?.score2 ?? '');
+            const [saved, setSaved] = React.useState(false);
+
+            const handleSave = () => {
+                if (s1 !== '' && s2 !== '') {
+                    onSave(match.id, parseInt(s1), parseInt(s2));
+                    setSaved(true);
+                    setTimeout(() => setSaved(false), 2000);
+                }
+            };
+
+            const localDate = match.date ? new Date(match.date).toLocaleString('en-US', { 
+                timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+            }) : 'TBD';
+
+            let pointsEarned = null;
+            if (actualResult && prediction != null) {
+                const actS1 = parseInt(actualResult.score1);
+                const actS2 = parseInt(actualResult.score2);
+                const preS1 = parseInt(prediction.score1);
+                const preS2 = parseInt(prediction.score2);
+                
+                if (preS1 === actS1 && preS2 === actS2) pointsEarned = 3;
+                else if (Math.sign(preS1 - preS2) === Math.sign(actS1 - actS2)) pointsEarned = 1;
+                else pointsEarned = 0;
+            }
+
+            return (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 relative overflow-hidden">
+                    {pointsEarned !== null && (
+                        <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-lg text-xs font-bold text-white ${pointsEarned === 3 ? 'bg-green-500' : pointsEarned === 1 ? 'bg-yellow-500' : 'bg-red-400'}`}>
+                            {pointsEarned} Pts
+                        </div>
+                    )}
+                    <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">{match.id.toUpperCase()} | {match.group}</span>
+                        {!isStarted && <Countdown targetDate={match.date} onComplete={() => {}} />}
+                    </div>
+                    <div className="text-center text-xs text-gray-400 mb-4">{localDate}</div>
+                    
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex flex-col items-center w-1/3">
+                            <span className="text-2xl mb-1">{match.flag1}</span>
+                            <span className="font-semibold text-sm text-center line-clamp-1">{match.team1}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 w-1/3 justify-center">
+                            {isStarted ? (
+                                <div className="text-center">
+                                    <div className="text-xs text-red-500 font-bold mb-1">FINAL</div>
+                                    <div className="flex items-center space-x-2">
+                                        <div className="w-10 p-2 bg-gray-100 rounded text-center font-bold">{actualResult?.score1 ?? '-'}</div>
+                                        <span className="text-gray-400">-</span>
+                                        <div className="w-10 p-2 bg-gray-100 rounded text-center font-bold">{actualResult?.score2 ?? '-'}</div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <input type="number" min="0" className="w-12 p-2 border rounded-lg text-center text-lg focus:ring-2 focus:ring-blue-500 outline-none" value={s1} onChange={e => setS1(e.target.value)} />
+                                    <span className="text-gray-400">-</span>
+                                    <input type="number" min="0" className="w-12 p-2 border rounded-lg text-center text-lg focus:ring-2 focus:ring-blue-500 outline-none" value={s2} onChange={e => setS2(e.target.value)} />
+                                </>
+                            )}
+                        </div>
+                        <div className="flex flex-col items-center w-1/3">
+                            <span className="text-2xl mb-1">{match.flag2}</span>
+                            <span className="font-semibold text-sm text-center line-clamp-1">{match.team2}</span>
+                        </div>
+                    </div>
+
+                    {!isStarted && (
+                        <button onClick={handleSave} className={`w-full py-2 rounded-lg font-bold transition-colors ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                            {saved ? 'Saved!' : 'Save Pick'}
+                        </button>
+                    )}
+                    {isStarted && prediction != null && (
+                        <div className="text-center text-sm text-gray-500 bg-gray-50 p-2 rounded-lg mt-2">
+                            Your Pick: <span className="font-bold">{prediction.score1} - {prediction.score2}</span>
+                        </div>
+                    )}
+
+                    {/* Reveal everyone's picks once the match starts */}
+                    {isStarted && compMembers && compMembers.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-gray-100">
+                            <h4 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Competition Picks</h4>
+                            <div className="grid grid-cols-2 gap-2">
+                                {compMembers.map(member => {
+                                    const memberPick = allPicks?.[member]?.[match.id];
+                                    return (
+                                        <div key={member} className="flex justify-between items-center bg-gray-50 p-1.5 rounded text-xs">
+                                            <span className="font-semibold truncate pr-2 text-gray-700">{member}</span>
+                                            <span className={`font-mono px-1.5 py-0.5 rounded border ${memberPick ? 'bg-white border-gray-200 text-gray-800 font-bold' : 'bg-transparent border-transparent text-gray-400'}`}>
+                                                {memberPick ? `${memberPick.score1}-${memberPick.score2}` : 'None'}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const StandingsTab = ({ matches, results }) => {
+            const calculateTable = (groupMatches) => {
+                let table = {};
+                groupMatches.forEach(m => {
+                    if (!table[m.team1]) table[m.team1] = { name: m.team1, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
+                    if (!table[m.team2]) table[m.team2] = { name: m.team2, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
+                    
+                    const res = results[m.id];
+                    if (res && res.score1 !== '' && res.score2 !== '') {
+                        const s1 = parseInt(res.score1);
+                        const s2 = parseInt(res.score2);
+                        table[m.team1].p++; table[m.team2].p++;
+                        table[m.team1].gf += s1; table[m.team1].ga += s2;
+                        table[m.team2].gf += s2; table[m.team2].ga += s1;
+                        table[m.team1].gd = table[m.team1].gf - table[m.team1].ga;
+                        table[m.team2].gd = table[m.team2].gf - table[m.team2].ga;
+
+                        if (s1 > s2) { table[m.team1].w++; table[m.team1].pts += 3; table[m.team2].l++; }
+                        else if (s1 < s2) { table[m.team2].w++; table[m.team2].pts += 3; table[m.team1].l++; }
+                        else { table[m.team1].d++; table[m.team2].d++; table[m.team1].pts += 1; table[m.team2].pts += 1; }
+                    }
+                });
+
+                return Object.values(table).sort((a, b) => {
+                    if (b.pts !== a.pts) return b.pts - a.pts;
+                    if (b.gd !== a.gd) return b.gd - a.gd;
+                    return b.gf - a.gf;
+                });
+            };
+
+            return (
+                <div className="space-y-6">
+                    {GROUPS.map(g => {
+                        const groupMatches = matches.filter(m => m.group === `Group ${g}`);
+                        if (groupMatches.length === 0) return null;
+                        const table = calculateTable(groupMatches);
+
+                        return (
+                            <div key={g} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                <div className="bg-gray-800 text-white p-2 text-sm font-bold text-center">Group {g}</div>
+                                <div className="overflow-x-auto no-scrollbar">
+                                    <table className="w-full text-sm text-left whitespace-nowrap">
+                                        <thead className="bg-gray-50 text-gray-500 text-xs">
+                                            <tr>
+                                                <th className="px-3 py-2 w-8">#</th>
+                                                <th className="px-2 py-2">Team</th>
+                                                <th className="px-2 py-2 text-center">P</th>
+                                                <th className="px-2 py-2 text-center">W</th>
+                                                <th className="px-2 py-2 text-center">D</th>
+                                                <th className="px-2 py-2 text-center">L</th>
+                                                <th className="px-2 py-2 text-center">GF</th>
+                                                <th className="px-2 py-2 text-center">GA</th>
+                                                <th className="px-2 py-2 text-center">GD</th>
+                                                <th className="px-3 py-2 text-center">Pts</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {table.map((team, idx) => (
+                                                <tr key={team.name} className={`border-t border-gray-100 ${idx < 2 ? 'bg-green-50' : ''}`}>
+                                                    <td className="px-3 py-2 font-bold text-gray-400">{idx + 1}</td>
+                                                    <td className="px-2 py-2 font-semibold truncate max-w-[120px]">{team.name}</td>
+                                                    <td className="px-2 py-2 text-center">{team.p}</td>
+                                                    <td className="px-2 py-2 text-center">{team.w}</td>
+                                                    <td className="px-2 py-2 text-center">{team.d}</td>
+                                                    <td className="px-2 py-2 text-center">{team.l}</td>
+                                                    <td className="px-2 py-2 text-center">{team.gf}</td>
+                                                    <td className="px-2 py-2 text-center">{team.ga}</td>
+                                                    <td className="px-2 py-2 text-center">{team.gd > 0 ? `+${team.gd}` : team.gd}</td>
+                                                    <td className="px-3 py-2 text-center font-bold text-blue-600">{team.pts}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        const LeaderboardTab = ({ comp, results, allPicks }) => {
+            const [scores, setScores] = React.useState([]);
+
+            React.useEffect(() => {
+                if (!comp) return;
+                const calcScores = comp.members.map(member => {
+                    const memberPicks = allPicks[member] || {};
+                    let pts = 0;
+                    Object.keys(results).forEach(matchId => {
+                        const act = results[matchId];
+                        const pre = memberPicks[matchId];
+                        if (act && pre && act.score1 !== '' && act.score2 !== '') {
+                            const a1 = parseInt(act.score1); const a2 = parseInt(act.score2);
+                            const p1 = parseInt(pre.score1); const p2 = parseInt(pre.score2);
+                            if (a1 === p1 && a2 === p2) pts += 3;
+                            else if (Math.sign(a1 - a2) === Math.sign(p1 - p2)) pts += 1;
+                        }
+                    });
+                    return { name: member, points: pts };
+                });
+                calcScores.sort((a, b) => b.points - a.points);
+                setScores(calcScores);
+            }, [comp, results, allPicks]);
+
+            if (!comp) return <div className="text-center text-gray-500 mt-10">Select a competition first.</div>;
+
+            return (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="bg-blue-600 text-white p-4">
+                        <h2 className="font-bold text-lg">{comp.name}</h2>
+                        <p className="text-xs opacity-80">Join Code: <span className="font-mono bg-white/20 px-2 py-1 rounded ml-1 tracking-widest">{comp.code}</span></p>
+                    </div>
+                    <ul className="divide-y divide-gray-100">
+                        {scores.map((s, i) => (
+                            <li key={s.name} className="flex justify-between items-center p-4">
+                                <div className="flex items-center space-x-3">
+                                    <span className="w-6 text-center font-bold text-gray-400">{i + 1}</span>
+                                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                                        {s.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className="font-semibold">{s.name}</span>
+                                </div>
+                                <span className="font-bold text-xl">{s.points} <span className="text-xs text-gray-400 font-normal">pts</span></span>
+                            </li>
+                        ))}
+                        {scores.length === 0 && <li className="p-4 text-center text-gray-500">No players yet. Share the code!</li>}
+                    </ul>
+                </div>
+            );
+        };
+
+        const BracketTab = ({ matches, results, timezone }) => {
+            const getRoundMatches = (groupName, count) => {
+                const found = matches.filter(m => m.group === groupName);
+                const padded = [...found];
+                while (padded.length < count) {
+                    padded.push({ 
+                        id: `placeholder_${groupName.replace(/\s+/g, '')}_${padded.length}`, 
+                        team1: 'TBD', 
+                        team2: 'TBD',
+                        group: groupName
+                    });
+                }
+                return padded;
+            };
+
+            const r32 = getRoundMatches('Round of 32', 16);
+            const r16 = getRoundMatches('Round of 16', 8);
+            const qf = getRoundMatches('Quarter-Final', 4);
+            const sf = getRoundMatches('Semi-Final', 2);
+            const final = getRoundMatches('Final', 1);
+
+            const MatchBox = ({ match }) => {
+                const res = results[match.id];
+                const dateStr = match.date ? new Date(match.date).toLocaleString('en-US', { 
+                    timeZone: timezone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+                }) : 'Time TBD';
+
+                return (
+                    <div className="bg-white border-2 border-gray-200 rounded-lg shadow-sm w-40 sm:w-48 overflow-hidden text-xs flex flex-col relative z-10 shrink-0">
+                        <div className="text-[9px] text-center text-gray-500 bg-gray-100 py-1 border-b border-gray-200 uppercase tracking-wider font-semibold">
+                            {match.id && !match.id.startsWith('placeholder') ? `${match.id.toUpperCase()} • ` : ''}{dateStr}
+                        </div>
+                        <div className="flex justify-between items-center p-2 border-b border-gray-100 bg-gray-50">
+                            <span className="truncate font-semibold text-gray-700">{match.team1}</span>
+                            <span className="font-bold text-blue-600 ml-2">{res && res.score1 !== '' ? res.score1 : '-'}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-white">
+                            <span className="truncate font-semibold text-gray-700">{match.team2}</span>
+                            <span className="font-bold text-blue-600 ml-2">{res && res.score2 !== '' ? res.score2 : '-'}</span>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                    <div className="bg-gray-800 text-white p-3 text-sm font-bold text-center tracking-wider">KNOCKOUT BRACKET</div>
+                    <div className="overflow-auto no-scrollbar bg-gray-50 p-6 relative" style={{ maxHeight: '70vh' }}>
+                        <div className="flex space-x-8 sm:space-x-12 min-w-max" style={{ height: '1400px' }}>
+                            <div className="flex flex-col justify-around h-full relative">
+                                <div className="absolute top-0 w-full text-center font-bold text-gray-400 uppercase text-[10px] -mt-4">Round of 32</div>
+                                {r32.map((m, i) => <MatchBox key={i} match={m} />)}
+                            </div>
+                            <div className="flex flex-col justify-around h-full relative">
+                                <div className="absolute top-0 w-full text-center font-bold text-gray-400 uppercase text-[10px] -mt-4">Round of 16</div>
+                                {r16.map((m, i) => <MatchBox key={i} match={m} />)}
+                            </div>
+                            <div className="flex flex-col justify-around h-full relative">
+                                <div className="absolute top-0 w-full text-center font-bold text-gray-400 uppercase text-[10px] -mt-4">Quarter-Finals</div>
+                                {qf.map((m, i) => <MatchBox key={i} match={m} />)}
+                            </div>
+                            <div className="flex flex-col justify-around h-full relative">
+                                <div className="absolute top-0 w-full text-center font-bold text-gray-400 uppercase text-[10px] -mt-4">Semi-Finals</div>
+                                {sf.map((m, i) => <MatchBox key={i} match={m} />)}
+                            </div>
+                            <div className="flex flex-col justify-around h-full relative">
+                                <div className="absolute top-0 w-full text-center font-bold text-yellow-500 uppercase text-[10px] -mt-4">Final</div>
+                                {final.map((m, i) => <MatchBox key={i} match={m} />)}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-3 bg-yellow-50 text-xs text-yellow-800 text-center border-t border-yellow-100 font-semibold">
+                        Drag horizontally & vertically to explore.
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminMatchRow = ({ match, actualResult, onUpdateMatch, onUpdateTeams }) => {
+            const [s1, setS1] = React.useState(actualResult?.score1 ?? '');
+            const [s2, setS2] = React.useState(actualResult?.score2 ?? '');
+            const [isEditingTeams, setIsEditingTeams] = React.useState(false);
+            const [editT1, setEditT1] = React.useState(match.team1);
+            const [editT2, setEditT2] = React.useState(match.team2);
+
+            const handleSave = () => {
+                onUpdateMatch(match.id, s1, s2);
+            };
+
+            const handleSaveTeams = () => {
+                onUpdateTeams(match.id, editT1, editT2);
+                setIsEditingTeams(false);
+            };
+
+            const isKnockout = match.group.includes('Round') || match.group.includes('Final') || match.group.includes('play-off');
+
+            return (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4">
+                    <div className="flex justify-between items-center mb-3">
+                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">{match.id.toUpperCase()} | {match.group}</span>
+                        <button onClick={() => window.open(`https://www.google.com/search?q=World+Cup+score+${match.team1}+vs+${match.team2}`, '_blank')} className="text-xs text-blue-500 underline">Check Google Score</button>
+                    </div>
+                    
+                    {isEditingTeams ? (
+                        <div className="flex flex-col space-y-2 mb-4 bg-gray-50 p-3 rounded-lg border">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Edit Knockout Teams:</label>
+                            <input className="w-full p-2 border rounded focus:ring-2 outline-none text-sm" value={editT1} onChange={e => setEditT1(e.target.value)} placeholder="Team 1" />
+                            <input className="w-full p-2 border rounded focus:ring-2 outline-none text-sm" value={editT2} onChange={e => setEditT2(e.target.value)} placeholder="Team 2" />
+                            <button onClick={handleSaveTeams} className="bg-blue-600 text-white px-3 py-2 rounded font-bold text-sm mt-2">Save Teams</button>
+                        </div>
+                    ) : (
+                        <div className="flex justify-between items-center mb-4 text-lg">
+                            <span className="font-semibold w-2/5 text-right truncate">{match.team1}</span>
+                            <span className="px-2 text-gray-300 text-sm">vs</span>
+                            <span className="font-semibold w-2/5 text-left truncate">{match.team2}</span>
+                            {isKnockout && (
+                                <button onClick={() => setIsEditingTeams(true)} className="ml-2 text-xs bg-gray-100 hover:bg-gray-200 p-1 px-2 rounded font-bold text-gray-600">Edit</button>
+                            )}
+                        </div>
+                    )}
+                    
+                    <div className="flex items-center space-x-2">
+                        <input type="number" className="w-1/3 p-2 border rounded text-center text-xl font-bold" placeholder="0" value={s1} onChange={e => setS1(e.target.value)} />
+                        <span className="text-gray-400 font-bold">-</span>
+                        <input type="number" className="w-1/3 p-2 border rounded text-center text-xl font-bold" placeholder="0" value={s2} onChange={e => setS2(e.target.value)} />
+                        <button onClick={handleSave} className="flex-1 bg-green-500 text-white rounded font-bold py-2 shadow-sm hover:bg-green-600 active:scale-95 transition-transform">Save Final</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminTab = ({ matches, results, onUpdateMatch, onUpdateTeams }) => {
+            const [isUnlocked, setIsUnlocked] = React.useState(() => localStorage.getItem('wc_admin_unlocked') === 'true');
+            const [pin, setPin] = React.useState('');
+            const [error, setError] = React.useState(false);
+
+            const handleUnlock = (e) => {
+                e.preventDefault();
+                if (pin === '2026') {
+                    setIsUnlocked(true);
+                    localStorage.setItem('wc_admin_unlocked', 'true');
+                    setError(false);
+                } else {
+                    setError(true);
+                    setPin('');
+                }
+            };
+
+            if (!isUnlocked) {
+                return (
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-sm mx-auto mt-10">
+                        <h2 className="text-xl font-bold mb-4 text-center">Admin Access</h2>
+                        <form onSubmit={handleUnlock} className="space-y-4">
+                            <div>
+                                <input type="password" placeholder="Enter PIN" value={pin} onChange={e => setPin(e.target.value)} className="w-full p-3 border rounded-lg text-center text-xl tracking-widest outline-none focus:ring-2" />
+                                {error && <p className="text-red-500 text-xs mt-1 text-center">Incorrect PIN. Try 2026.</p>}
+                            </div>
+                            <button type="submit" className="w-full bg-black text-white p-3 rounded-lg font-bold">Unlock</button>
+                        </form>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-md mx-auto space-y-4">
+                    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-sm text-yellow-800 mb-6 shadow-sm">
+                        <p className="font-bold mb-1">Cloud Admin Panel</p>
+                        <p>Entering scores here updates your Google Sheet instantly, syncing the leaderboard globally.</p>
+                    </div>
+                    {matches.map(match => (
+                        <AdminMatchRow key={match.id} match={match} actualResult={results[match.id]} onUpdateMatch={onUpdateMatch} onUpdateTeams={onUpdateTeams} />
+                    ))}
+                </div>
+            );
+        };
+
+        const Lobby = ({ username, comps, onCreate, onJoin, onSelectComp, onLogout }) => {
+            const [joinCode, setJoinCode] = React.useState('');
+            const [newName, setNewName] = React.useState('');
+
+            return (
+                <div className="max-w-md mx-auto p-4 pt-10 space-y-8">
+                    <div className="text-center">
+                        <h1 className="text-3xl font-black text-gray-900 mb-2">Welcome, {username}!</h1>
+                        <p className="text-gray-500">Join or create a tipping competition.</p>
+                        <button onClick={onLogout} className="text-sm text-red-500 underline mt-2">Change Profile</button>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-4">
+                        <h2 className="font-bold text-lg">Your Competitions</h2>
+                        {comps.length === 0 ? (
+                            <p className="text-sm text-gray-400 italic">You aren't in any competitions yet.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {comps.map(c => (
+                                    <button key={c.code} onClick={() => onSelectComp(c)} className="w-full flex justify-between items-center p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100">
+                                        <span className="font-bold text-blue-900">{c.name}</span>
+                                        <span className="text-xs bg-white px-2 py-1 rounded shadow-sm text-gray-500">Code: {c.code}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                            <div>
+                                <h3 className="font-bold text-sm mb-2">Join with Code</h3>
+                                <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength="5" placeholder="CODE" className="w-full p-2 border rounded mb-2 text-center uppercase tracking-widest font-mono text-sm" />
+                            </div>
+                            <button onClick={() => { onJoin(joinCode); setJoinCode(''); }} className="w-full bg-gray-900 text-white rounded py-2 text-sm font-bold mt-auto">Join</button>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                            <div>
+                                <h3 className="font-bold text-sm mb-2">Create New</h3>
+                                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Office Pool" className="w-full p-2 border rounded mb-2 text-sm" />
+                            </div>
+                            <button onClick={() => { onCreate(newName); setNewName(''); }} className="w-full bg-blue-600 text-white rounded py-2 text-sm font-bold mt-auto">Create</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [username, setUsername] = React.useState(() => localStorage.getItem('wc_username') || '');
+            const [inputName, setInputName] = React.useState('');
+            const [activeComp, setActiveComp] = React.useState(null);
+            
+            const [activeTab, setActiveTab] = React.useState('matches');
+            const [timezone, setTimezone] = React.useState(() => localStorage.getItem('wc_timezone') || 'Australia/Sydney');
+            
+            const [matches, setMatches] = React.useState([]);
+            const [results, setResults] = React.useState({});
+            const [picks, setPicks] = React.useState({});
+            const [allPicks, setAllPicks] = React.useState({});
+            const [myComps, setMyComps] = React.useState([]);
+            const [isSyncing, setIsSyncing] = React.useState(false);
+            const [dataLoaded, setDataLoaded] = React.useState(false);
+
+            const refreshData = React.useCallback(async () => {
+                if (username) {
+                    setIsSyncing(true);
+                    try {
+                        const res = await fetch(SCRIPT_URL, { method: 'GET', redirect: 'follow' });
+                        if (!res.ok) throw new Error("Network response was not ok");
+                        const data = await res.json();
+                        
+                        let currentMatches = [];
+                        if (data.matches && data.matches.length > 0) {
+                            currentMatches = data.matches;
+                        }
+
+                        const adminObj = {};
+                        if (data.admin) {
+                            data.admin.forEach(a => { adminObj[a.match] = { s1: a.s1, s2: a.s2, t1: a.t1, t2: a.t2 }; });
+                        }
+                        
+                        setMatches(currentMatches.map(m => {
+                            if (adminObj[m.id] && (adminObj[m.id].t1 || adminObj[m.id].t2)) {
+                                return { ...m, team1: adminObj[m.id].t1 || m.team1, team2: adminObj[m.id].t2 || m.team2 };
+                            }
+                            return m;
+                        }));
+
+                        const picksObj = {};
+                        const allPicksObj = {};
+                        if (data.picks) {
+                            data.picks.forEach(p => {
+                                if (!allPicksObj[p.user]) allPicksObj[p.user] = {};
+                                allPicksObj[p.user][p.match] = { score1: p.s1, score2: p.s2 };
+                                if (p.user === username) picksObj[p.match] = { score1: p.s1, score2: p.s2 };
+                            });
+                        }
+                        setPicks(picksObj);
+                        setAllPicks(allPicksObj);
+                        setResults(adminObj);
+
+                        if (data.comps) {
+                            const userComps = data.comps.filter(c => c.members.includes(username));
+                            setMyComps(userComps);
+                            if (activeComp) {
+                                const updatedActive = data.comps.find(c => c.code === activeComp.code);
+                                if (updatedActive) setActiveComp(updatedActive);
+                            }
+                        }
+                        setDataLoaded(true);
+                    } catch (err) {
+                        console.error("Failed to fetch data from Google Sheets:", err);
+                        setDataLoaded(true); 
+                    } finally {
+                        setIsSyncing(false);
+                    }
+                }
+            }, [username, activeComp]);
+
+            React.useEffect(() => {
+                refreshData();
+                const timer = setInterval(refreshData, 15000);
+                return () => clearInterval(timer);
+            }, [refreshData]);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (inputName.trim()) {
+                    const cleanName = inputName.trim();
+                    setUsername(cleanName);
+                    localStorage.setItem('wc_username', cleanName);
+                }
+            };
+
+            const handleLogout = () => {
+                setUsername('');
+                setActiveComp(null);
+                setDataLoaded(false);
+                localStorage.removeItem('wc_username');
+            };
+
+            const handleSavePick = async (matchId, s1, s2) => {
+                setIsSyncing(true);
+                try {
+                    await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'savePick', user: username, match: matchId, s1: parseInt(s1), s2: parseInt(s2) })
+                    });
+                    await refreshData();
+                } catch (err) { console.error("Failed to save pick:", err); } finally { setIsSyncing(false); }
+            };
+
+            const handleAdminMatch = async (matchId, s1, s2) => {
+                setIsSyncing(true);
+                try {
+                    await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'adminUpdate', match: matchId, s1: s1 === '' ? '' : parseInt(s1), s2: s2 === '' ? '' : parseInt(s2) })
+                    });
+                    await refreshData();
+                } catch (err) { console.error("Failed to save match:", err); } finally { setIsSyncing(false); }
+            };
+
+            const handleAdminTeams = async (matchId, t1, t2) => {
+                setIsSyncing(true);
+                try {
+                    await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'adminUpdate', match: matchId, t1: t1, t2: t2 })
+                    });
+                    await refreshData();
+                } catch (err) { console.error("Failed to save teams:", err); } finally { setIsSyncing(false); }
+            };
+
+            const handleCreateComp = async (name) => {
+                if (!name) return;
+                setIsSyncing(true);
+                const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+                try {
+                    await fetch(SCRIPT_URL, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'createComp', code, name, user: username }) 
+                    });
+                    await fetch(SCRIPT_URL, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'joinComp', code, user: username }) 
+                    });
+                    await refreshData();
+                } catch(e) { console.error(e); } finally { setIsSyncing(false); }
+            };
+
+            const handleJoinComp = async (code) => {
+                if (!code) return;
+                setIsSyncing(true);
+                try {
+                    await fetch(SCRIPT_URL, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'joinComp', code, user: username }) 
+                    });
+                    await refreshData();
+                } catch(e) { console.error(e); } finally { setIsSyncing(false); }
+            };
+
+            if (!username) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full border border-gray-100">
+                            <div className="text-center mb-8">
+                                <div className="text-5xl mb-4 animate-bounce">🏆</div>
+                                <h1 className="text-2xl font-black text-gray-900">World Cup 2026</h1>
+                                <p className="text-gray-500 mt-2 text-sm">Enter your name to start picking.</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input type="text" placeholder="Your Name (e.g. Felix)" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-semibold" value={inputName} onChange={e => setInputName(e.target.value)} />
+                                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-md">Enter</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!dataLoaded) {
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-4">
+                        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                        <p className="text-gray-500 font-semibold animate-pulse">Syncing with Google Sheets...</p>
+                    </div>
+                );
+            }
+
+            if (!activeComp) {
+                return (
+                    <Lobby 
+                        username={username} 
+                        comps={myComps}
+                        onSelectComp={setActiveComp}
+                        onLogout={handleLogout}
+                        onCreate={handleCreateComp}
+                        onJoin={handleJoinComp}
+                    />
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex flex-col bg-gray-50">
+                    <div className="bg-white px-4 py-3 shadow-sm border-b sticky top-0 z-10 flex flex-col space-y-2">
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center space-x-2">
+                                <button onClick={() => setActiveComp(null)} className="text-gray-400 hover:text-gray-800 p-1 bg-gray-50 rounded-full">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                                </button>
+                                <div>
+                                    <h1 className="font-bold text-gray-900 leading-tight">{activeComp.name}</h1>
+                                    <div className="flex items-center space-x-1">
+                                        <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-yellow-400 animate-ping' : 'bg-green-500'}`}></div>
+                                        <span className="text-[10px] text-gray-500 font-semibold">{isSyncing ? 'Syncing...' : 'Connected'} • {username}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <select className="bg-gray-100 text-xs p-2 rounded outline-none font-semibold text-gray-600 border border-gray-200" value={timezone} onChange={e => { setTimezone(e.target.value); localStorage.setItem('wc_timezone', e.target.value); }}>
+                                <option value="Australia/Sydney">AEST (Sydney)</option>
+                                <option value="Australia/Perth">AWST (Perth)</option>
+                                <option value="Europe/London">GMT (London)</option>
+                                <option value="America/New_York">EST (New York)</option>
+                                <option value="UTC">UTC</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 p-4 pb-24 max-w-md w-full mx-auto">
+                        {activeTab === 'matches' && (
+                            <div className="space-y-2">
+                                {matches.length === 0 ? (
+                                    <div className="text-center p-10 bg-white rounded-xl border border-dashed border-gray-300">
+                                        <p className="text-gray-500 font-semibold mb-2">No Matches Found!</p>
+                                        <p className="text-xs text-gray-400">Make sure you pasted the match data into your Google Sheet "Matches" tab.</p>
+                                    </div>
+                                ) : (
+                                    matches.map(m => (
+                                        <MatchCard 
+                                            key={m.id} 
+                                            match={m} 
+                                            timezone={timezone}
+                                            prediction={picks[m.id]} 
+                                            actualResult={results[m.id]}
+                                            isStarted={results[m.id] || (m.date && new Date(m.date) < new Date())} 
+                                            onSave={handleSavePick}
+                                            allPicks={allPicks}
+                                            compMembers={activeComp.members}
+                                        />
+                                    ))
+                                )}
+                            </div>
+                        )}
+                        {activeTab === 'leaderboard' && <LeaderboardTab comp={activeComp} results={results} allPicks={allPicks} />}
+                        {activeTab === 'standings' && <StandingsTab matches={matches} results={results} />}
+                        {activeTab === 'bracket' && <BracketTab matches={matches} results={results} timezone={timezone} />}
+                        {activeTab === 'admin' && (
+                            <AdminTab 
+                                matches={matches} 
+                                results={results} 
+                                onUpdateMatch={handleAdminMatch}
+                                onUpdateTeams={handleAdminTeams} 
+                            />
+                        )}
+                    </div>
+
+                    <div className="bg-white border-t border-gray-200 fixed bottom-0 w-full z-20 pb-safe">
+                        <div className="flex justify-around items-center h-16 max-w-md mx-auto">
+                            <button onClick={() => setActiveTab('matches')} className={`flex flex-col items-center flex-1 py-2 transition-colors ${activeTab === 'matches' ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>
+                                <span className="text-xl mb-1">⚽</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Matches</span>
+                            </button>
+                            <button onClick={() => setActiveTab('leaderboard')} className={`flex flex-col items-center flex-1 py-2 transition-colors ${activeTab === 'leaderboard' ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>
+                                <span className="text-xl mb-1">🏆</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Leader</span>
+                            </button>
+                            <button onClick={() => setActiveTab('standings')} className={`flex flex-col items-center flex-1 py-2 transition-colors ${activeTab === 'standings' ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>
+                                <span className="text-xl mb-1">📊</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Groups</span>
+                            </button>
+                            <button onClick={() => setActiveTab('bracket')} className={`flex flex-col items-center flex-1 py-2 transition-colors ${activeTab === 'bracket' ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>
+                                <span className="text-xl mb-1">⚔️</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Bracket</span>
+                            </button>
+                            <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center flex-1 py-2 transition-colors ${activeTab === 'admin' ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>
+                                <span className="text-xl mb-1">⚙️</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Admin</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
