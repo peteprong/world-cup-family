@@ -24,9 +24,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        
         // YOUR SPECIFIC GOOGLE SHEETS CLOUD DATABASE URL
-        // *** IMPORTANT: Double check this is your exact Web App URL! ***
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz8_lhKZy4AjFZ5ZGvaq_3rI_vWYKjBZkJhmvC7XXIcLRYrbZdZCRO2mJn7DZ-lLrTx/exec';
         
         const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
@@ -580,14 +578,13 @@
                             const userComps = data.comps.filter(c => c.members.includes(username));
                             setMyComps(userComps);
                             
-                            // Check if activeComp still exists and update its data
-                            if (activeComp) {
-                                const updatedComp = data.comps.find(c => c.code === activeComp.code);
-                                // Ensure activeComp isn't null if it wasn't found in this specific refresh cycle.
-                                if(updatedComp) {
-                                    setActiveComp(updatedComp);
-                                }
-                            }
+                            // The ultimate navigation bug fix! 
+                            // Only update activeComp if we were ALREADY looking at one.
+                            setActiveComp(prevComp => {
+                                if (!prevComp) return null; // We are in the lobby! Do not jump back!
+                                const updatedComp = data.comps.find(c => c.code === prevComp.code);
+                                return updatedComp || prevComp;
+                            });
                         }
                         setDataLoaded(true);
                     } catch (err) {
@@ -601,7 +598,7 @@
                 syncData();
                 const timer = setInterval(syncData, 15000);
                 return () => clearInterval(timer);
-            }, [username, activeComp]); // Depend on activeComp to use its latest value
+            }, [username]); // Removed activeComp from dependency so it doesn't trigger endless loops
 
             const handleLogin = (e) => {
                 e.preventDefault();
