@@ -62,8 +62,119 @@
             return `🤝 Draw`;
         };
 
+        // --- NEW: Dedicated Login Screen Component ---
+        const LoginScreen = ({ knownUsers, onLogin, dataLoaded }) => {
+            const [mode, setMode] = React.useState('returning'); 
+            const [selectedUser, setSelectedUser] = React.useState('');
+            const [inputName, setInputName] = React.useState('');
+            const [error, setError] = React.useState('');
+
+            React.useEffect(() => {
+                if (mode === 'returning' && knownUsers.length > 0 && !selectedUser) {
+                    setSelectedUser(knownUsers[0]);
+                }
+            }, [knownUsers, mode]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                setError('');
+
+                if (mode === 'returning') {
+                    if (!selectedUser) {
+                        setError('Please select your name from the list.');
+                        return;
+                    }
+                    onLogin(selectedUser);
+                } else {
+                    const cleanName = inputName.trim();
+                    if (!cleanName) {
+                        setError('Please enter your name.');
+                        return;
+                    }
+                    if (knownUsers.some(u => u.toLowerCase() === cleanName.toLowerCase())) {
+                        setError('This name already exists! Please go to "Returning Player" to log in.');
+                        return;
+                    }
+                    onLogin(cleanName);
+                }
+            };
+
+            if (!dataLoaded) {
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-4">
+                        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                        <p className="text-gray-500 font-semibold animate-pulse">Loading World Cup Data...</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full border border-gray-100">
+                        <div className="text-center mb-6">
+                            <div className="text-5xl mb-4 animate-bounce">🏆</div>
+                            <h1 className="text-2xl font-black text-gray-900">World Cup 2026</h1>
+                            <p className="text-gray-500 mt-2 text-sm">Welcome! Let's get you in the game.</p>
+                        </div>
+                        
+                        <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+                            <button 
+                                type="button"
+                                onClick={() => { setMode('returning'); setError(''); }}
+                                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'returning' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Returning Player
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => { setMode('new'); setError(''); }}
+                                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'new' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                New Player
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {mode === 'returning' ? (
+                                knownUsers.length > 0 ? (
+                                    <select 
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-gray-800 bg-white"
+                                        value={selectedUser}
+                                        onChange={(e) => setSelectedUser(e.target.value)}
+                                    >
+                                        <option value="" disabled>Select your name...</option>
+                                        {knownUsers.map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
+                                ) : (
+                                    <div className="text-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                        <p className="text-sm text-gray-500 font-semibold">No players registered yet.</p>
+                                        <button type="button" onClick={() => {setMode('new'); setError('');}} className="text-blue-600 font-bold mt-2 text-sm underline">Register as a New Player</button>
+                                    </div>
+                                )
+                            ) : (
+                                <input 
+                                    type="text" 
+                                    placeholder="Your Name (e.g. Felix)" 
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-semibold" 
+                                    value={inputName} 
+                                    onChange={e => setInputName(e.target.value)} 
+                                />
+                            )}
+
+                            {error && <p className="text-red-500 text-xs font-semibold text-center">{error}</p>}
+
+                            {!(mode === 'returning' && knownUsers.length === 0) && (
+                                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-md">
+                                    {mode === 'returning' ? 'Enter Game' : 'Register & Enter'}
+                                </button>
+                            )}
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
         const MatchCard = ({ match, prediction, onSave, isStarted, actualResult, timezone, allPicks, compMembers }) => {
-            // Local prediction states mapped to selections (null, 'team1', 'draw', 'team2')
             const [selection, setSelection] = React.useState(() => {
                 if (!prediction) return null;
                 const s1 = parseInt(prediction.score1);
@@ -75,7 +186,6 @@
             });
             const [saved, setSaved] = React.useState(false);
 
-            // Sync with parent props update
             React.useEffect(() => {
                 if (prediction) {
                     const s1 = parseInt(prediction.score1);
@@ -120,7 +230,6 @@
                 }
             }
 
-            // Points calculation based on 3 for Win, 1 for Draw, 0 for loss
             let pointsEarned = null;
             if (actualResult && prediction != null && actualResult.score1 !== '' && actualResult.score2 !== '') {
                 const actS1 = parseInt(actualResult.score1);
@@ -151,9 +260,7 @@
                     </div>
                     <div className="text-center text-[11px] font-medium text-gray-400 mb-3">{localDate}</div>
                     
-                    {}
                     <div className="flex justify-between items-stretch gap-2 mb-4">
-                        {/* Team 1 Selector */}
                         <button 
                             disabled={isStarted}
                             onClick={() => handleSelect('team1')}
@@ -173,7 +280,6 @@
                             )}
                         </button>
 
-                        {/* Middle VS or Draw Button */}
                         <button 
                             disabled={isStarted}
                             onClick={() => handleSelect('draw')}
@@ -202,7 +308,6 @@
                             )}
                         </button>
 
-                        {/* Team 2 Selector */}
                         <button 
                             disabled={isStarted}
                             onClick={() => handleSelect('team2')}
@@ -245,7 +350,6 @@
                         </div>
                     )}
 
-                    {}
                     {isStarted && compMembers && compMembers.length > 0 && (
                         <div className="mt-4 pt-3 border-t border-gray-100">
                             <h4 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-wider">Competition Picks</h4>
@@ -638,7 +742,7 @@
 
         const App = () => {
             const [username, setUsername] = React.useState(() => localStorage.getItem('wc_username') || '');
-            const [inputName, setInputName] = React.useState('');
+            const [knownUsers, setKnownUsers] = React.useState([]); // New global state for user lists
             const [activeComp, setActiveComp] = React.useState(null);
             
             const [activeTab, setActiveTab] = React.useState('matches');
@@ -654,7 +758,6 @@
 
             React.useEffect(() => {
                 const syncData = async () => {
-                    if (!username) return;
                     setIsSyncing(true);
                     try {
                         const res = await fetch(SCRIPT_URL, {
@@ -697,15 +800,27 @@
                         setResults(adminObj);
 
                         if (data.comps) {
-                            const userComps = data.comps.filter(c => c.members.includes(username));
-                            setMyComps(userComps);
-                            
-                            // Safe functional update protecting navigation state jumping
-                            setActiveComp(prevComp => {
-                                if (!prevComp) return null; // Keep users strictly on lobby if they clicked back
-                                const updatedComp = data.comps.find(c => c.code === prevComp.code);
-                                return updatedComp || prevComp;
+                            // Automatically extract and sort all unique users found in all comps
+                            let usersSet = new Set();
+                            data.comps.forEach(c => {
+                                if(c.members && Array.isArray(c.members)) {
+                                    c.members.forEach(m => {
+                                        if (m && m.trim()) usersSet.add(m.trim());
+                                    });
+                                }
                             });
+                            setKnownUsers(Array.from(usersSet).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+
+                            if (username) {
+                                const userComps = data.comps.filter(c => c.members.includes(username));
+                                setMyComps(userComps);
+                                
+                                setActiveComp(prevComp => {
+                                    if (!prevComp) return null;
+                                    const updatedComp = data.comps.find(c => c.code === prevComp.code);
+                                    return updatedComp || prevComp;
+                                });
+                            }
                         }
                         setDataLoaded(true);
                     } catch (err) {
@@ -719,27 +834,21 @@
                 syncData();
                 const timer = setInterval(syncData, 15000);
                 return () => clearInterval(timer);
-            }, [username]);
+            }, [username]); // Passing username ensures updating comps when user logs in/out
 
-            const handleLogin = (e) => {
-                e.preventDefault();
-                if (inputName.trim()) {
-                    const cleanName = inputName.trim();
-                    setUsername(cleanName);
-                    localStorage.setItem('wc_username', cleanName);
-                }
+            const handleLogin = (name) => {
+                setUsername(name);
+                localStorage.setItem('wc_username', name);
             };
 
             const handleLogout = () => {
                 setUsername('');
                 setActiveComp(null);
-                setDataLoaded(false);
                 localStorage.removeItem('wc_username');
             };
 
             const handleSavePick = async (matchId, s1, s2) => {
                 setIsSyncing(true);
-                // Optimistic instant local state updates
                 setPicks(prev => ({ ...prev, [matchId]: { score1: s1, score2: s2 } }));
                 setAllPicks(prev => {
                     const updatedUserPicks = { ...(prev[username] || {}), [matchId]: { score1: s1, score2: s2 } };
@@ -801,24 +910,12 @@
                 } catch(e) { console.error(e); } finally { setIsSyncing(false); }
             };
 
+            // Initial view replaces the old basic input form
             if (!username) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-                        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full border border-gray-100">
-                            <div className="text-center mb-8">
-                                <div className="text-5xl mb-4 animate-bounce">🏆</div>
-                                <h1 className="text-2xl font-black text-gray-900">World Cup 2026</h1>
-                                <p className="text-gray-500 mt-2 text-sm">Enter your name to start picking.</p>
-                            </div>
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <input type="text" placeholder="Your Name (e.g. Felix)" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-semibold" value={inputName} onChange={e => setInputName(e.target.value)} />
-                                <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-md">Enter</button>
-                            </form>
-                        </div>
-                    </div>
-                );
+                return <LoginScreen knownUsers={knownUsers} onLogin={handleLogin} dataLoaded={dataLoaded} />;
             }
 
+            // Syncing view for after you login
             if (!dataLoaded) {
                 return (
                     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 space-y-4">
