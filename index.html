@@ -498,18 +498,29 @@
                         <p className="text-xs opacity-80">Join Code: <span className="font-mono bg-white/20 px-2 py-1 rounded ml-1 tracking-widest">{comp.code}</span></p>
                     </div>
                     <ul className="divide-y divide-gray-100">
-                        {scores.map((s, i) => (
-                            <li key={s.name} className="flex justify-between items-center p-4">
-                                <div className="flex items-center space-x-3">
-                                    <span className="w-6 text-center font-bold text-gray-400">{i + 1}</span>
-                                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                                        {s.name.charAt(0).toUpperCase()}
+                        {scores.map((s, i) => {
+                            const isLast = i === scores.length - 1 && scores.length > 1;
+                            return (
+                                <li key={s.name} className={`flex justify-between items-center p-4 ${isLast ? 'bg-red-50/50' : ''}`}>
+                                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                        <span className={`w-6 text-center font-bold ${isLast ? 'text-red-400' : 'text-gray-400'}`}>{i + 1}</span>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0 ${isLast ? 'bg-red-200 text-red-700' : 'bg-blue-100 text-blue-600'}`}>
+                                            {s.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex items-center flex-wrap gap-2 min-w-0">
+                                            <span className={`font-semibold truncate ${isLast ? 'text-red-600 animate-pulse' : ''}`} style={isLast ? { textShadow: '0 0 8px rgba(239,68,68,0.6)' } : {}}>{s.name}</span>
+                                            {isLast && (
+                                                <div className="flex items-center animate-bounce drop-shadow-md">
+                                                    <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[6px] border-r-red-500"></div>
+                                                    <div className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm whitespace-nowrap">What a loser!</div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                    <span className="font-semibold">{s.name}</span>
-                                </div>
-                                <span className="font-bold text-xl">{s.points} <span className="text-xs text-gray-400 font-normal">pts</span></span>
-                            </li>
-                        ))}
+                                    <span className={`font-bold text-xl ml-2 shrink-0 ${isLast ? 'text-red-600' : ''}`}>{s.points} <span className={`text-xs font-normal ${isLast ? 'text-red-400' : 'text-gray-400'}`}>pts</span></span>
+                                </li>
+                            );
+                        })}
                         {scores.length === 0 && <li className="p-4 text-center text-gray-500">No players yet. Share the code!</li>}
                     </ul>
                 </div>
