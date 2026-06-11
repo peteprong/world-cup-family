@@ -184,7 +184,6 @@
                 if (s2 > s1) return 'team2';
                 return 'draw';
             });
-            const [saved, setSaved] = React.useState(false);
 
             React.useEffect(() => {
                 if (prediction) {
@@ -196,28 +195,23 @@
                         else setSelection('draw');
                     }
                 } else {
-                    setSelection(null);
-                }
-            }, [prediction]);
+                setSelection(null);
+            }
+        }, [prediction]);
 
-            const handleSelect = (choice) => {
-                if (isStarted) return;
-                setSelection(choice);
-            };
+        const handleSelect = (choice) => {
+            if (isStarted) return;
+            setSelection(choice);
+            
+            let s1 = 0, s2 = 0;
+            if (choice === 'team1') { s1 = 1; s2 = 0; }
+            else if (choice === 'team2') { s1 = 0; s2 = 1; }
+            else if (choice === 'draw') { s1 = 1; s2 = 1; }
 
-            const handleSave = () => {
-                if (!selection) return;
-                let s1 = 0, s2 = 0;
-                if (selection === 'team1') { s1 = 1; s2 = 0; }
-                else if (selection === 'team2') { s1 = 0; s2 = 1; }
-                else if (selection === 'draw') { s1 = 1; s2 = 1; }
+            onSave(match.id, s1, s2);
+        };
 
-                onSave(match.id, s1, s2);
-                setSaved(true);
-                setTimeout(() => setSaved(false), 2000);
-            };
-
-            const formatter = new Intl.DateTimeFormat('en-US', {
+        const formatter = new Intl.DateTimeFormat('en-US', {
                 timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
             });
             
@@ -321,32 +315,16 @@
                             <span className="text-3xl mb-2">{match.flag2}</span>
                             <span className="font-bold text-xs text-center text-gray-800 line-clamp-2 leading-tight">{match.team2}</span>
                             {selection === 'team2' && (
-                                <span className="mt-2 text-[10px] font-bold text-blue-600 flex items-center bg-blue-100/50 px-2 py-0.5 rounded-full">
-                                    ✓ Winner
-                                </span>
-                            )}
-                        </button>
-                    </div>
-
-                    {!isStarted && (
-                        <button 
-                            disabled={!selection}
-                            onClick={handleSave} 
-                            className={`w-full py-2.5 rounded-xl font-bold transition-all text-sm ${
-                                !selection 
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                    : saved 
-                                        ? 'bg-green-500 text-white shadow-md' 
-                                        : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95'
-                            }`}
-                        >
-                            {saved ? 'Saved Successfully! ✓' : selection ? 'Save My Choice' : 'Select a Winner or Draw'}
-                        </button>
-                    )}
-                    
-                    {isStarted && prediction != null && (
-                        <div className="text-center text-xs font-semibold text-gray-500 bg-gray-50 py-2.5 rounded-xl border border-gray-100 mt-2">
-                            Your Pick: <span className="text-blue-600 font-bold">{getPredictionLabel(prediction.score1, prediction.score2, match.team1, match.flag1, match.team2, match.flag2)}</span>
+                            <span className="mt-2 text-[10px] font-bold text-blue-600 flex items-center bg-blue-100/50 px-2 py-0.5 rounded-full">
+                                ✓ Winner
+                            </span>
+                        )}
+                    </button>
+                </div>
+                
+                {isStarted && prediction != null && (
+                    <div className="text-center text-xs font-semibold text-gray-500 bg-gray-50 py-2.5 rounded-xl border border-gray-100 mt-2">
+                        Your Pick: <span className="text-blue-600 font-bold">{getPredictionLabel(prediction.score1, prediction.score2, match.team1, match.flag1, match.team2, match.flag2)}</span>
                         </div>
                     )}
 
