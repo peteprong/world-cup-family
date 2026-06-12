@@ -477,7 +477,8 @@
                     </div>
                     <ul className="divide-y divide-gray-100">
                         {scores.map((s, i) => {
-                            const isLast = i === scores.length - 1 && scores.length > 1;
+                            const lowestScore = scores.length > 0 ? scores[scores.length - 1].points : null;
+                            const isLast = scores.length > 1 && s.points === lowestScore;
                             return (
                                 <li key={s.name} className={`flex justify-between items-center p-4 ${isLast ? 'bg-red-50/50' : ''}`}>
                                     <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -751,7 +752,6 @@
                     try {
                         const res = await fetch(SCRIPT_URL, {
                             method: 'GET',
-                            headers: { 'Accept': 'application/json' },
                             mode: 'cors'
                         });
                         
@@ -846,6 +846,7 @@
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'savePick', user: username, match: matchId, s1: parseInt(s1), s2: parseInt(s2) })
                     });
                 } catch (err) { console.error("Failed to save pick:", err); } finally { setIsSyncing(false); }
@@ -857,6 +858,7 @@
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'adminUpdate', match: matchId, s1: s1 === '' ? '' : parseInt(s1), s2: s2 === '' ? '' : parseInt(s2) })
                     });
                 } catch (err) { console.error("Failed to save match:", err); } finally { setIsSyncing(false); }
@@ -867,6 +869,7 @@
                 try {
                     await fetch(SCRIPT_URL, {
                         method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'adminUpdate', match: matchId, t1: t1, t2: t2 })
                     });
                 } catch (err) { console.error("Failed to save teams:", err); } finally { setIsSyncing(false); }
@@ -879,10 +882,12 @@
                 try {
                     await fetch(SCRIPT_URL, { 
                         method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'createComp', code, name, user: username }) 
                     });
                     await fetch(SCRIPT_URL, { 
                         method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'joinComp', code, user: username }) 
                     });
                 } catch(e) { console.error(e); } finally { setIsSyncing(false); }
@@ -894,6 +899,7 @@
                 try {
                     await fetch(SCRIPT_URL, { 
                         method: 'POST', 
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'joinComp', code, user: username }) 
                     });
                 } catch(e) { console.error(e); } finally { setIsSyncing(false); }
