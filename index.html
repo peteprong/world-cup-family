@@ -62,7 +62,6 @@
             return `🤝 Draw`;
         };
 
-        // --- Dedicated Login Screen Component ---
         const LoginScreen = ({ knownUsers, onLogin, dataLoaded }) => {
             const [mode, setMode] = React.useState('returning'); 
             const [selectedUser, setSelectedUser] = React.useState('');
@@ -495,17 +494,17 @@
                                             {isFirst && (
                                                 <div className="flex items-center animate-bounce drop-shadow-md ml-1">
                                                     <svg viewBox="0 0 100 100" className="w-8 h-8 mr-1 drop-shadow-sm">
-                                                        <!-- Cartoon Body -->
+                                                        {/* Cartoon Body */}
                                                         <path d="M30 100 Q 50 65 70 100" fill="#22c55e" />
-                                                        <!-- Arms lifting up -->
+                                                        {/* Arms lifting up */}
                                                         <path d="M40 75 L 30 35" stroke="#fcd34d" strokeWidth="5" strokeLinecap="round" />
                                                         <path d="M60 75 L 70 35" stroke="#fcd34d" strokeWidth="5" strokeLinecap="round" />
-                                                        <!-- Head & Face -->
+                                                        {/* Head & Face */}
                                                         <circle cx="50" cy="70" r="14" fill="#fcd34d" />
                                                         <circle cx="45" cy="67" r="2" fill="#064e3b" />
                                                         <circle cx="55" cy="67" r="2" fill="#064e3b" />
                                                         <path d="M45 74 Q 50 78 55 74" stroke="#064e3b" strokeWidth="2" strokeLinecap="round" fill="none" />
-                                                        <!-- World Cup Trophy -->
+                                                        {/* World Cup Trophy */}
                                                         <g transform="translate(50, 32)">
                                                             <path d="M-7 14 C-10 0, -5 -8, 0 -12 C 5 -8, 10 0, 7 14 Z" fill="#fbbf24" />
                                                             <circle cx="0" cy="-14" r="8" fill="#fbbf24" />
