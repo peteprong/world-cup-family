@@ -783,7 +783,6 @@
                                 let closestMatch = matches[0];
                                 let minDiff = Infinity;
                                 
-                                // Find the match closest to the current time
                                 matches.forEach(m => {
                                     if (m.date) {
                                         const diff = Math.abs(new Date(m.date) - now);
@@ -794,7 +793,6 @@
                                     }
                                 });
                                 
-                                // Scroll it directly into the center of the screen
                                 if (closestMatch) {
                                     const prefix = activeTab === 'matches' ? 'match-card-' : 'admin-match-';
                                     const el = document.getElementById(prefix + closestMatch.id);
@@ -802,7 +800,7 @@
                                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                     }
                                 }
-                            }, 150); // slight delay to allow the tab to render first
+                            }, 150);
                         }
                         initialScrollDoneRef.current = true;
                         prevTabRef.current = activeTab;
