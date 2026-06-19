@@ -10,7 +10,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Babel for in-browser JSX compilation -->
-    <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; }
@@ -18,6 +18,7 @@
         .tab-inactive { color: #6b7280; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
     </style>
 </head>
 <body>
@@ -240,7 +241,7 @@
             }
 
             return (
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 relative overflow-hidden">
+                <div id={`match-card-${match.id}`} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 relative overflow-hidden">
                     {pointsEarned !== null && (
                         <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-lg text-xs font-bold text-white ${pointsEarned === 3 ? 'bg-green-500 animate-pulse' : pointsEarned === 1 ? 'bg-yellow-500' : 'bg-red-400'}`}>
                             {pointsEarned} Pts
@@ -478,7 +479,7 @@
                             const highestScore = scores.length > 0 ? scores[0].points : null;
                             const lowestScore = scores.length > 0 ? scores[scores.length - 1].points : null;
                             
-                            const isFirst = scores.length > 1 && s.points === highestScore && highestScore > lowestScore;
+                            const isFirst = scores.length > 1 && s.points === highestScore && highestScore > lowestScore && highestScore > 0;
                             const isLast = scores.length > 1 && s.points === lowestScore && highestScore > lowestScore;
 
                             return (
@@ -627,7 +628,7 @@
             const isKnockout = match.group.includes('Round') || match.group.includes('Final') || match.group.includes('play-off');
 
             return (
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4">
+                <div id={`admin-match-${match.id}`} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4">
                     <div className="flex justify-between items-center mb-3">
                         <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">{match.id.toUpperCase()} | {match.group}</span>
                         <button onClick={() => window.open(`https://www.google.com/search?q=World+Cup+score+${match.team1}+vs+${match.team2}`, '_blank')} className="text-xs text-blue-500 underline">Check Google Score</button>
@@ -769,6 +770,45 @@
             const [myComps, setMyComps] = React.useState([]);
             const [isSyncing, setIsSyncing] = React.useState(false);
             const [dataLoaded, setDataLoaded] = React.useState(false);
+
+            const prevTabRef = React.useRef(activeTab);
+            const initialScrollDoneRef = React.useRef(false);
+
+            React.useEffect(() => {
+                if (matches.length > 0) {
+                    if (!initialScrollDoneRef.current || prevTabRef.current !== activeTab) {
+                        if (activeTab === 'matches' || activeTab === 'admin') {
+                            setTimeout(() => {
+                                const now = new Date();
+                                let closestMatch = matches[0];
+                                let minDiff = Infinity;
+                                
+                                // Find the match closest to the current time
+                                matches.forEach(m => {
+                                    if (m.date) {
+                                        const diff = Math.abs(new Date(m.date) - now);
+                                        if (diff < minDiff) {
+                                            minDiff = diff;
+                                            closestMatch = m;
+                                        }
+                                    }
+                                });
+                                
+                                // Scroll it directly into the center of the screen
+                                if (closestMatch) {
+                                    const prefix = activeTab === 'matches' ? 'match-card-' : 'admin-match-';
+                                    const el = document.getElementById(prefix + closestMatch.id);
+                                    if (el) {
+                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }
+                                }
+                            }, 150); // slight delay to allow the tab to render first
+                        }
+                        initialScrollDoneRef.current = true;
+                        prevTabRef.current = activeTab;
+                    }
+                }
+            }, [activeTab, matches]);
 
             React.useEffect(() => {
                 const syncData = async () => {
@@ -959,7 +999,7 @@
                         <div className="flex justify-between items-center">
                             <div className="flex items-center space-x-2">
                                 <button onClick={() => setActiveComp(null)} className="text-gray-400 hover:text-gray-800 p-1.5 bg-gray-50 rounded-full transition-transform active:scale-95">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
                                 </button>
                                 <div>
                                     <h1 className="font-bold text-gray-900 leading-tight">{activeComp.name}</h1>
