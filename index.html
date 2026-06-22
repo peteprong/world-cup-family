@@ -437,34 +437,87 @@
             );
         };
 
-        const LeaderboardTab = ({ comp, results, allPicks }) => {
+        // Computes points for each member using only the results in `resultIds` (a Set of match ids).
+        // Returns members sorted by points desc, each annotated with a 1-based `rank`.
+        // Tied scores share the same rank (e.g. 1, 2, 2, 4) so a tie doesn't look like movement.
+        const computeRanks = (members, allPicks, results, resultIds) => {
+            const calcScores = members.map(member => {
+                const memberPicks = allPicks[member] || {};
+                let pts = 0;
+                resultIds.forEach(matchId => {
+                    const act = results[matchId];
+                    const pre = memberPicks[matchId];
+                    if (act && pre && act.score1 !== '' && act.score2 !== '' && pre.score1 !== '' && pre.score2 !== '') {
+                        const a1 = parseInt(act.score1); const a2 = parseInt(act.score2);
+                        const p1 = parseInt(pre.score1); const p2 = parseInt(pre.score2);
+
+                        const actSign = Math.sign(a1 - a2);
+                        const preSign = Math.sign(p1 - p2);
+
+                        if (actSign === preSign) {
+                            pts += actSign === 0 ? 1 : 3;
+                        }
+                    }
+                });
+                return { name: member, points: pts };
+            });
+            calcScores.sort((a, b) => b.points - a.points);
+
+            let rank = 0;
+            let lastPoints = null;
+            const ranked = calcScores.map((s, i) => {
+                if (s.points !== lastPoints) {
+                    rank = i + 1;
+                    lastPoints = s.points;
+                }
+                return { ...s, rank };
+            });
+            return ranked;
+        };
+
+        const LeaderboardTab = ({ comp, results, allPicks, matches }) => {
             const [scores, setScores] = React.useState([]);
 
             React.useEffect(() => {
                 if (!comp) return;
-                const calcScores = comp.members.map(member => {
-                    const memberPicks = allPicks[member] || {};
-                    let pts = 0;
-                    Object.keys(results).forEach(matchId => {
-                        const act = results[matchId];
-                        const pre = memberPicks[matchId];
-                        if (act && pre && act.score1 !== '' && act.score2 !== '' && pre.score1 !== '' && pre.score2 !== '') {
-                            const a1 = parseInt(act.score1); const a2 = parseInt(act.score2);
-                            const p1 = parseInt(pre.score1); const p2 = parseInt(pre.score2);
-                            
-                            const actSign = Math.sign(a1 - a2);
-                            const preSign = Math.sign(p1 - p2);
 
-                            if (actSign === preSign) {
-                                pts += actSign === 0 ? 1 : 3;
-                            }
-                        }
-                    });
-                    return { name: member, points: pts };
+                const resultIds = Object.keys(results).filter(id => {
+                    const r = results[id];
+                    return r && r.score1 !== '' && r.score2 !== '' && r.score1 !== undefined && r.score2 !== undefined;
                 });
-                calcScores.sort((a, b) => b.points - a.points);
-                setScores(calcScores);
-            }, [comp, results, allPicks]);
+
+                const currentRanked = computeRanks(comp.members, allPicks, results, resultIds);
+
+                // Find the most recent kickoff time among completed matches, then treat every match
+                // that kicked off at that same time as one batch ("the last round of games"). This
+                // means if two matches finish simultaneously, movement reflects both results combined.
+                const completedWithDates = resultIds
+                    .map(id => ({ id, date: matches.find(m => m.id === id)?.date }))
+                    .filter(m => m.date);
+                completedWithDates.sort((a, b) => new Date(b.date) - new Date(a.date));
+                const lastTimestamp = completedWithDates.length > 0
+                    ? new Date(completedWithDates[0].date).getTime()
+                    : null;
+                const lastBatchIds = lastTimestamp !== null
+                    ? completedWithDates.filter(m => new Date(m.date).getTime() === lastTimestamp).map(m => m.id)
+                    : [];
+
+                let previousRankByName = {};
+                if (lastBatchIds.length > 0) {
+                    const priorResultIds = resultIds.filter(id => !lastBatchIds.includes(id));
+                    const previousRanked = computeRanks(comp.members, allPicks, results, priorResultIds);
+                    previousRanked.forEach(p => { previousRankByName[p.name] = p.rank; });
+                }
+
+                const withMovement = currentRanked.map(s => {
+                    const prevRank = previousRankByName[s.name];
+                    // No movement shown if there's no prior state (e.g. very first scored match/round) or rank is unchanged.
+                    const movement = (lastBatchIds.length > 0 && prevRank !== undefined) ? (prevRank - s.rank) : 0;
+                    return { ...s, movement };
+                });
+
+                setScores(withMovement);
+            }, [comp, results, allPicks, matches]);
 
             if (!comp) return <div className="text-center text-gray-500 mt-10">Select a competition first.</div>;
 
@@ -491,6 +544,19 @@
                                         </div>
                                         <div className="flex items-center flex-wrap gap-2 min-w-0">
                                             <span className={`font-semibold truncate ${isFirst ? 'text-green-600 animate-pulse' : isLast ? 'text-red-600 animate-pulse' : ''}`} style={isFirst ? { textShadow: '0 0 8px rgba(34,197,94,0.6)' } : isLast ? { textShadow: '0 0 8px rgba(239,68,68,0.6)' } : {}}>{s.name}</span>
+
+                                            {s.movement > 0 && (
+                                                <span className="inline-flex items-center text-[10px] font-bold text-green-600 bg-green-100 rounded-full px-1.5 py-0.5 leading-none">
+                                                    <svg className="w-2.5 h-2.5 mr-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l8 10h-5v6h-6v-6H4z" /></svg>
+                                                    {s.movement}
+                                                </span>
+                                            )}
+                                            {s.movement < 0 && (
+                                                <span className="inline-flex items-center text-[10px] font-bold text-red-600 bg-red-100 rounded-full px-1.5 py-0.5 leading-none">
+                                                    <svg className="w-2.5 h-2.5 mr-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20l-8-10h5V4h6v6h5z" /></svg>
+                                                    {Math.abs(s.movement)}
+                                                </span>
+                                            )}
                                             
                                             {isFirst && (
                                                 <div className="flex items-center animate-bounce drop-shadow-md ml-1">
@@ -1042,7 +1108,7 @@
                                 )}
                             </div>
                         )}
-                        {activeTab === 'leaderboard' && <LeaderboardTab comp={activeComp} results={results} allPicks={allPicks} />}
+                        {activeTab === 'leaderboard' && <LeaderboardTab comp={activeComp} results={results} allPicks={allPicks} matches={matches} />}
                         {activeTab === 'standings' && <StandingsTab matches={matches} results={results} />}
                         {activeTab === 'bracket' && <BracketTab matches={matches} results={results} timezone={timezone} />}
                         {activeTab === 'admin' && (
