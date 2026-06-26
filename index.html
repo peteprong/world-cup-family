@@ -25,7 +25,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw5LvtC489iKi9wTx6yNdqPBba7iMWLVz9-T6u-CDG7uQ6yzg2_IdsZiPxu7-1v_nVu/exec';
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz8_lhKZy4AjFZ5ZGvaq_3rI_vWYKjBZkJhmvC7XXIcLRYrbZdZCRO2mJn7DZ-lLrTx/exec';
         
         const GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L'];
 
@@ -582,7 +582,7 @@
                                             {isLast && (
                                                 <div className="flex items-center animate-bounce drop-shadow-md">
                                                     <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[6px] border-r-red-500"></div>
-                                                    <div className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm whitespace-nowrap">C'mon battler, you can do better than this!</div>
+                                                    <div className="bg-red-500 text-white text-sm font-black px-2 py-0.5 rounded shadow-sm whitespace-nowrap">😢</div>
                                                 </div>
                                             )}
                                         </div>
@@ -964,18 +964,46 @@
 
             const handleSavePick = async (matchId, s1, s2) => {
                 setIsSyncing(true);
+
                 setPicks(prev => ({ ...prev, [matchId]: { score1: s1, score2: s2 } }));
                 setAllPicks(prev => {
                     const updatedUserPicks = { ...(prev[username] || {}), [matchId]: { score1: s1, score2: s2 } };
                     return { ...prev, [username]: updatedUserPicks };
                 });
-                try {
-                    await fetch(SCRIPT_URL, {
+
+                const attemptSave = async () => {
+                    const res = await fetch(SCRIPT_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                         body: JSON.stringify({ action: 'savePick', user: username, match: matchId, s1: parseInt(s1), s2: parseInt(s2) })
                     });
-                } catch (err) { console.error("Failed to save pick:", err); } finally { setIsSyncing(false); }
+                    if (!res.ok) throw new Error('Bad response: ' + res.status);
+                    const json = await res.json();
+                    if (json.status !== 'success') throw new Error('Save not confirmed by server');
+                    return json;
+                };
+
+                // Quietly keep trying in the background — transient network/cold-start blips with
+                // Apps Script are common and almost always succeed within a few attempts.
+                const delays = [500, 1500, 3000, 5000]; // ms between retries
+                let lastErr = null;
+                for (let attempt = 0; attempt <= delays.length; attempt++) {
+                    try {
+                        await attemptSave();
+                        lastErr = null;
+                        break;
+                    } catch (err) {
+                        lastErr = err;
+                        if (attempt < delays.length) {
+                            await new Promise(r => setTimeout(r, delays[attempt]));
+                        }
+                    }
+                }
+                if (lastErr) {
+                    // Logged for debugging only — no user-facing interruption.
+                    console.error("Pick save ultimately failed after retries:", lastErr);
+                }
+                setIsSyncing(false);
             };
 
             const handleAdminMatch = async (matchId, s1, s2) => {
