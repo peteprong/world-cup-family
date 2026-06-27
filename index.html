@@ -1127,7 +1127,7 @@
                                             timezone={timezone}
                                             prediction={picks[m.id]} 
                                             actualResult={results[m.id]}
-                                            isStarted={results[m.id] || (m.date && new Date(m.date) < new Date())} 
+                                            isStarted={(results[m.id] && results[m.id].score1 !== '' && results[m.id].score1 !== undefined && results[m.id].score1 !== null) || (m.date && new Date(m.date) < new Date())}
                                             onSave={handleSavePick}
                                             allPicks={allPicks}
                                             compMembers={activeComp.members}
