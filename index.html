@@ -174,6 +174,7 @@
         };
 
         const MatchCard = ({ match, prediction, onSave, isStarted, actualResult, timezone, allPicks, compMembers }) => {
+            const isKnockout = match.group.includes('Round') || match.group.includes('Final') || match.group.includes('play-off');
             const [selection, setSelection] = React.useState(() => {
                 if (!prediction) return null;
                 const s1 = parseInt(prediction.score1);
@@ -257,7 +258,7 @@
                         <button 
                             disabled={isStarted}
                             onClick={() => handleSelect('team1')}
-                            className={`flex flex-col items-center justify-center w-5/12 p-3 rounded-xl border-2 transition-all ${
+                            className={`flex flex-col items-center justify-center ${isKnockout ? 'w-11/24' : 'w-5/12'} p-3 rounded-xl border-2 transition-all ${
                                 isStarted ? 'border-gray-100 cursor-not-allowed bg-gray-50' :
                                 selection === 'team1' 
                                     ? 'border-blue-500 bg-blue-50/50 shadow-md scale-[1.02]' 
@@ -274,10 +275,10 @@
                         </button>
 
                         <button 
-                            disabled={isStarted}
+                            disabled={isStarted || isKnockout}
                             onClick={() => handleSelect('draw')}
-                            className={`flex flex-col items-center justify-center w-2/12 py-3 rounded-xl border-2 transition-all ${
-                                isStarted 
+                            className={`flex flex-col items-center justify-center ${isKnockout ? 'w-1/12' : 'w-2/12'} py-3 rounded-xl border-2 transition-all ${
+                                isStarted || isKnockout
                                     ? 'border-gray-100 cursor-not-allowed bg-gray-50' 
                                     : selection === 'draw'
                                         ? 'border-yellow-500 bg-yellow-50/50 shadow-md scale-[1.02]'
@@ -296,7 +297,9 @@
                             ) : (
                                 <div className="text-center flex flex-col items-center justify-center h-full">
                                     <span className="text-xs font-black text-gray-400">VS</span>
-                                    <span className={`text-[10px] font-bold mt-2 px-1.5 py-0.5 rounded transition-all ${selection === 'draw' ? 'bg-yellow-500 text-white' : 'text-gray-400 bg-gray-50'}`}>DRAW</span>
+                                    {!isKnockout && (
+                                        <span className={`text-[10px] font-bold mt-2 px-1.5 py-0.5 rounded transition-all ${selection === 'draw' ? 'bg-yellow-500 text-white' : 'text-gray-400 bg-gray-50'}`}>DRAW</span>
+                                    )}
                                 </div>
                             )}
                         </button>
@@ -304,7 +307,7 @@
                         <button 
                             disabled={isStarted}
                             onClick={() => handleSelect('team2')}
-                            className={`flex flex-col items-center justify-center w-5/12 p-3 rounded-xl border-2 transition-all ${
+                            className={`flex flex-col items-center justify-center ${isKnockout ? 'w-11/24' : 'w-5/12'} p-3 rounded-xl border-2 transition-all ${
                                 isStarted ? 'border-gray-100 cursor-not-allowed bg-gray-50' :
                                 selection === 'team2' 
                                     ? 'border-blue-500 bg-blue-50/50 shadow-md scale-[1.02]' 
