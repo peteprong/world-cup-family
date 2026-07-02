@@ -685,6 +685,16 @@
             const [editT1, setEditT1] = React.useState(match.team1);
             const [editT2, setEditT2] = React.useState(match.team2);
 
+            // Keep score inputs in sync with the latest server data.
+            // Without this, the inputs initialise once on first render and
+            // never update -- so if scores are corrected in the sheet while
+            // the Admin page is already open, the inputs keep showing the old
+            // values and silently overwrite the correction on the next save.
+            React.useEffect(() => {
+                setS1(actualResult?.score1 ?? '');
+                setS2(actualResult?.score2 ?? '');
+            }, [actualResult?.score1, actualResult?.score2]);
+
             const handleSave = () => {
                 onUpdateMatch(match.id, s1, s2);
             };
