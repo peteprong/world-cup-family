@@ -185,14 +185,7 @@
                 return 'draw';
             });
 
-            // Track whether the user has made a local pick that hasn't yet
-            // been confirmed back from the server. While this is true, we
-            // ignore server updates so the UI doesn't revert the pick
-            // mid-save just because a poll returned stale data.
-            const [pendingLocal, setPendingLocal] = React.useState(false);
-
             React.useEffect(() => {
-                if (pendingLocal) return; // don't overwrite a pick the user just made
                 if (prediction) {
                     const s1 = parseInt(prediction.score1);
                     const s2 = parseInt(prediction.score2);
@@ -209,19 +202,13 @@
             const handleSelect = (choice) => {
                 if (isStarted) return;
                 setSelection(choice);
-                setPendingLocal(true);
-                
+
                 let s1 = 0, s2 = 0;
                 if (choice === 'team1') { s1 = 1; s2 = 0; }
                 else if (choice === 'team2') { s1 = 0; s2 = 1; }
                 else if (choice === 'draw') { s1 = 1; s2 = 1; }
 
-                onSave(match.id, s1, s2).finally(() => {
-                    // Once the save completes (success or failure), allow
-                    // server data to sync again so future polls keep the
-                    // display accurate.
-                    setPendingLocal(false);
-                });
+                onSave(match.id, s1, s2);
             };
 
             const formatter = new Intl.DateTimeFormat('en-US', {
@@ -858,6 +845,7 @@
             const [matches, setMatches] = React.useState([]);
             const [results, setResults] = React.useState({});
             const [picks, setPicks] = React.useState({});
+            const pendingSaves = React.useRef({});
             const [allPicks, setAllPicks] = React.useState({});
             const [myComps, setMyComps] = React.useState([]);
             const [isSyncing, setIsSyncing] = React.useState(false);
@@ -937,8 +925,27 @@
                                 if (p.user === username) picksObj[p.match] = { score1: p.s1, score2: p.s2 };
                             });
                         }
-                        setPicks(picksObj);
-                        setAllPicks(allPicksObj);
+                        // Don't overwrite picks that are currently being saved —
+                        // the server hasn't confirmed them yet so its response
+                        // still shows the old value, which would revert the UI.
+                        setPicks(prev => {
+                            const merged = { ...picksObj };
+                            Object.keys(pendingSaves.current).forEach(matchId => {
+                                if (prev[matchId]) merged[matchId] = prev[matchId];
+                            });
+                            return merged;
+                        });
+                        setAllPicks(prev => {
+                            const merged = { ...allPicksObj };
+                            if (allPicksObj[username]) {
+                                Object.keys(pendingSaves.current).forEach(matchId => {
+                                    if (prev[username]?.[matchId]) {
+                                        merged[username] = { ...merged[username], [matchId]: prev[username][matchId] };
+                                    }
+                                });
+                            }
+                            return merged;
+                        });
                         setResults(adminObj);
 
                         if (data.comps) {
@@ -991,6 +998,10 @@
             const handleSavePick = async (matchId, s1, s2) => {
                 setIsSyncing(true);
 
+                // Mark this match as having a pending local save so the
+                // polling loop doesn't overwrite it with stale server data.
+                pendingSaves.current[matchId] = true;
+
                 setPicks(prev => ({ ...prev, [matchId]: { score1: s1, score2: s2 } }));
                 setAllPicks(prev => {
                     const updatedUserPicks = { ...(prev[username] || {}), [matchId]: { score1: s1, score2: s2 } };
@@ -1029,6 +1040,9 @@
                     // Logged for debugging only — no user-facing interruption.
                     console.error("Pick save ultimately failed after retries:", lastErr);
                 }
+
+                // Save complete — allow polling to sync this match again.
+                delete pendingSaves.current[matchId];
                 setIsSyncing(false);
             };
 
