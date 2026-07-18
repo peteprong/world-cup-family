@@ -187,23 +187,29 @@
 
             const predScore1 = prediction ? prediction.score1 : null;
             const predScore2 = prediction ? prediction.score2 : null;
+            const localSelection = React.useRef(null);
 
             React.useEffect(() => {
                 if (predScore1 !== null && predScore2 !== null) {
                     const s1 = parseInt(predScore1);
                     const s2 = parseInt(predScore2);
                     if (!isNaN(s1) && !isNaN(s2)) {
-                        if (s1 > s2) setSelection('team1');
-                        else if (s2 > s1) setSelection('team2');
-                        else setSelection('draw');
+                        const newSel = s1 > s2 ? 'team1' : s2 > s1 ? 'team2' : 'draw';
+                        localSelection.current = null; // server confirmed, clear local override
+                        setSelection(newSel);
                     }
                 } else {
-                    setSelection(null);
+                    // Only clear selection if the user hasn't made a local pick
+                    // that's still waiting to be confirmed by the server.
+                    if (!localSelection.current) {
+                        setSelection(null);
+                    }
                 }
             }, [predScore1, predScore2]);
 
             const handleSelect = (choice) => {
                 if (isStarted) return;
+                localSelection.current = choice; // hold local pick until server confirms
                 setSelection(choice);
 
                 let s1 = 0, s2 = 0;
