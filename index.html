@@ -176,38 +176,29 @@
         const MatchCard = ({ match, prediction, onSave, isStarted, actualResult, timezone, allPicks, compMembers }) => {
             const isKnockout = match.group.includes('Round') || match.group.includes('Final') || match.group.includes('play-off');
 
-            const getServerSelection = () => {
-                if (!prediction) return null;
-                const s1 = parseInt(prediction.score1);
-                const s2 = parseInt(prediction.score2);
+            const getSelectionFromPrediction = (pred) => {
+                if (!pred) return null;
+                const s1 = parseInt(pred.score1);
+                const s2 = parseInt(pred.score2);
                 if (isNaN(s1) || isNaN(s2)) return null;
                 if (s1 > s2) return 'team1';
                 if (s2 > s1) return 'team2';
                 return 'draw';
             };
 
-            // Store local picks in localStorage so they survive any re-render or remount.
-            // Key includes match ID so each match has its own slot.
-            const localKey = 'wc_local_pick_' + match.id;
-            const [selection, setSelection] = React.useState(() => {
-                const local = localStorage.getItem(localKey);
-                if (local) return local;
-                return getServerSelection();
-            });
+            const [selection, setSelection] = React.useState(() => getSelectionFromPrediction(prediction));
+            const lockedUntil = React.useRef(0);
 
-            // Once the server confirms the pick (prediction changes to match local),
-            // clear the localStorage slot so future sessions start fresh from server.
+            // Only sync from server if no local pick is in flight
             React.useEffect(() => {
-                const serverSel = getServerSelection();
-                const local = localStorage.getItem(localKey);
-                if (local && serverSel === local) {
-                    localStorage.removeItem(localKey);
-                }
+                if (Date.now() < lockedUntil.current) return;
+                setSelection(getSelectionFromPrediction(prediction));
             }, [prediction?.score1, prediction?.score2]);
 
             const handleSelect = (choice) => {
                 if (isStarted) return;
-                localStorage.setItem(localKey, choice);
+                // Lock out server syncing for 30 seconds so polls can't revert this pick
+                lockedUntil.current = Date.now() + 30000;
                 setSelection(choice);
 
                 let s1 = 0, s2 = 0;
@@ -216,19 +207,20 @@
                 else if (choice === 'draw') { s1 = 1; s2 = 1; }
 
                 onSave(match.id, s1, s2).then(() => {
-                    // Show brief green flash on the match card to confirm server save
                     const el = document.getElementById('match-card-' + match.id);
                     if (el) {
                         el.style.outline = '3px solid #22c55e';
                         setTimeout(() => { el.style.outline = ''; }, 2000);
                     }
+                    // Save confirmed — release the lock so server can sync normally again
+                    lockedUntil.current = 0;
                 }).catch(() => {
-                    // Show red flash if all retries failed
                     const el = document.getElementById('match-card-' + match.id);
                     if (el) {
                         el.style.outline = '3px solid #ef4444';
                         setTimeout(() => { el.style.outline = ''; }, 2000);
                     }
+                    lockedUntil.current = 0;
                 });
             };
 
@@ -763,18 +755,25 @@
         };
 
         const AdminTab = ({ matches, results, onUpdateMatch, onUpdateTeams }) => {
-            const [isUnlocked, setIsUnlocked] = React.useState(() => localStorage.getItem('wc_admin_unlocked') === 'true');
+            const [isUnlocked, setIsUnlocked] = React.useState(() => {
+                // Force re-authentication with new PIN — clear any old unlock tokens
+                localStorage.removeItem('wc_admin_unlocked');
+                return false;
+            });
             const [pin, setPin] = React.useState('');
-            const [error, setError] = React.useState(false);
+            const [error, setError] = React.useState('');
 
             const handleUnlock = (e) => {
                 e.preventDefault();
-                if (pin === '2026') {
+                if (pin === '2026football') {
                     setIsUnlocked(true);
                     localStorage.setItem('wc_admin_unlocked', 'true');
-                    setError(false);
+                    setError('');
+                } else if (pin === '2026') {
+                    setError('mattias');
+                    setPin('');
                 } else {
-                    setError(true);
+                    setError('wrong');
                     setPin('');
                 }
             };
@@ -786,7 +785,8 @@
                         <form onSubmit={handleUnlock} className="space-y-4">
                             <div>
                                 <input type="password" placeholder="Enter PIN" value={pin} onChange={e => setPin(e.target.value)} className="w-full p-3 border rounded-lg text-center text-xl tracking-widest outline-none focus:ring-2" />
-                                {error && <p className="text-red-500 text-xs mt-1 text-center">Incorrect PIN. Try 2026.</p>}
+                                {error === 'mattias' && <p className="text-red-500 text-xs mt-1 text-center font-bold">🚨 I know where you live Mattias! 🚨</p>}
+                                {error === 'wrong' && <p className="text-red-500 text-xs mt-1 text-center">Incorrect PIN.</p>}
                             </div>
                             <button type="submit" className="w-full bg-black text-white p-3 rounded-lg font-bold">Unlock</button>
                         </form>
