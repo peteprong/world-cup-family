@@ -185,22 +185,22 @@
                 return 'draw';
             });
 
+            const predScore1 = prediction ? prediction.score1 : null;
+            const predScore2 = prediction ? prediction.score2 : null;
+
             React.useEffect(() => {
-                if (prediction) {
-                    const s1 = parseInt(prediction.score1);
-                    const s2 = parseInt(prediction.score2);
+                if (predScore1 !== null && predScore2 !== null) {
+                    const s1 = parseInt(predScore1);
+                    const s2 = parseInt(predScore2);
                     if (!isNaN(s1) && !isNaN(s2)) {
-                        const newSel = s1 > s2 ? 'team1' : s2 > s1 ? 'team2' : 'draw';
-                        console.log('[EFFECT]', match.id, 'prediction changed -> setting selection to', newSel, 'from', prediction);
                         if (s1 > s2) setSelection('team1');
                         else if (s2 > s1) setSelection('team2');
                         else setSelection('draw');
                     }
                 } else {
-                    console.log('[EFFECT]', match.id, 'prediction is null -> clearing selection');
                     setSelection(null);
                 }
-            }, [prediction]);
+            }, [predScore1, predScore2]);
 
             const handleSelect = (choice) => {
                 if (isStarted) return;
@@ -933,13 +933,8 @@
                         // still shows the old value, which would revert the UI.
                         setPicks(prev => {
                             const merged = { ...picksObj };
-                            const pending = Object.keys(pendingSaves.current);
-                            if (pending.length > 0) console.log('[POLL] Protecting pending saves:', pending);
-                            pending.forEach(matchId => {
-                                if (prev[matchId]) {
-                                    console.log('[POLL] Keeping local pick for', matchId, prev[matchId]);
-                                    merged[matchId] = prev[matchId];
-                                }
+                            Object.keys(pendingSaves.current).forEach(matchId => {
+                                if (prev[matchId]) merged[matchId] = prev[matchId];
                             });
                             return merged;
                         });
@@ -1005,12 +1000,10 @@
 
             const handleSavePick = async (matchId, s1, s2) => {
                 setIsSyncing(true);
-                console.log('[PICK] Save started:', matchId, s1, s2);
 
                 // Mark this match as having a pending local save so the
                 // polling loop doesn't overwrite it with stale server data.
                 pendingSaves.current[matchId] = true;
-                console.log('[PICK] pendingSaves after mark:', Object.keys(pendingSaves.current));
 
                 setPicks(prev => ({ ...prev, [matchId]: { score1: s1, score2: s2 } }));
                 setAllPicks(prev => {
