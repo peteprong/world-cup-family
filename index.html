@@ -185,7 +185,14 @@
                 return 'draw';
             });
 
+            // Track whether the user has made a local pick that hasn't yet
+            // been confirmed back from the server. While this is true, we
+            // ignore server updates so the UI doesn't revert the pick
+            // mid-save just because a poll returned stale data.
+            const [pendingLocal, setPendingLocal] = React.useState(false);
+
             React.useEffect(() => {
+                if (pendingLocal) return; // don't overwrite a pick the user just made
                 if (prediction) {
                     const s1 = parseInt(prediction.score1);
                     const s2 = parseInt(prediction.score2);
@@ -202,13 +209,19 @@
             const handleSelect = (choice) => {
                 if (isStarted) return;
                 setSelection(choice);
+                setPendingLocal(true);
                 
                 let s1 = 0, s2 = 0;
                 if (choice === 'team1') { s1 = 1; s2 = 0; }
                 else if (choice === 'team2') { s1 = 0; s2 = 1; }
                 else if (choice === 'draw') { s1 = 1; s2 = 1; }
 
-                onSave(match.id, s1, s2);
+                onSave(match.id, s1, s2).finally(() => {
+                    // Once the save completes (success or failure), allow
+                    // server data to sync again so future polls keep the
+                    // display accurate.
+                    setPendingLocal(false);
+                });
             };
 
             const formatter = new Intl.DateTimeFormat('en-US', {
