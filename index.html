@@ -176,13 +176,7 @@
         const MatchCard = ({ match, prediction, onSave, isStarted, actualResult, timezone, allPicks, compMembers }) => {
             const isKnockout = match.group.includes('Round') || match.group.includes('Final') || match.group.includes('play-off');
 
-            // Use a ref for the user's local pick so it never gets wiped by re-renders.
-            // We only fall back to server prediction when no local pick exists yet.
-            const localPick = React.useRef(null);
-            const [, forceRender] = React.useState(0);
-
-            const getSelection = () => {
-                if (localPick.current) return localPick.current;
+            const getServerSelection = () => {
                 if (!prediction) return null;
                 const s1 = parseInt(prediction.score1);
                 const s2 = parseInt(prediction.score2);
@@ -192,12 +186,29 @@
                 return 'draw';
             };
 
-            const selection = getSelection();
+            // Store local picks in localStorage so they survive any re-render or remount.
+            // Key includes match ID so each match has its own slot.
+            const localKey = 'wc_local_pick_' + match.id;
+            const [selection, setSelection] = React.useState(() => {
+                const local = localStorage.getItem(localKey);
+                if (local) return local;
+                return getServerSelection();
+            });
+
+            // Once the server confirms the pick (prediction changes to match local),
+            // clear the localStorage slot so future sessions start fresh from server.
+            React.useEffect(() => {
+                const serverSel = getServerSelection();
+                const local = localStorage.getItem(localKey);
+                if (local && serverSel === local) {
+                    localStorage.removeItem(localKey);
+                }
+            }, [prediction?.score1, prediction?.score2]);
 
             const handleSelect = (choice) => {
                 if (isStarted) return;
-                localPick.current = choice;
-                forceRender(n => n + 1);
+                localStorage.setItem(localKey, choice);
+                setSelection(choice);
 
                 let s1 = 0, s2 = 0;
                 if (choice === 'team1') { s1 = 1; s2 = 0; }
